@@ -1,0 +1,103 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+
+write_files:
+  - path: /usr/local/sbin/install-docker.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      dnf -y install dnf-utils
+      dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+      systemctl enable --now docker
+      usermod -aG docker opc
+
+  - path: /usr/local/sbin/install-oracle-sqlplus.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      dnf -y install oracle-instantclient-release-el9 unzip
+      dnf -y install oracle-instantclient19.31-basic oracle-instantclient19.31-sqlplus
+
+      mkdir -p /opt/oracle/wallet
+      chown root:opc /opt/oracle/wallet
+      chmod 0750 /opt/oracle/wallet
+
+  - path: /usr/local/sbin/install-adb-wallet
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      wallet_zip="${1:-}"
+      if [[ -z "$wallet_zip" || ! -f "$wallet_zip" ]]; then
+        echo "Usage: sudo install-adb-wallet /path/to/Wallet_PFTDEV.zip" >&2
+        exit 2
+      fi
+
+      install -d -o root -g opc -m 0750 /opt/oracle/wallet
+      unzip -o -q "$wallet_zip" -d /opt/oracle/wallet
+      chown -R root:opc /opt/oracle/wallet
+      find /opt/oracle/wallet -type d -exec chmod 0750 {} \;
+      find /opt/oracle/wallet -type f -exec chmod 0640 {} \;
+
+      printf '%s\n' \
+        'WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="/opt/oracle/wallet")))' \
+        'SSL_SERVER_DN_MATCH=yes' \
+        > /opt/oracle/wallet/sqlnet.ora
+
+      echo "ADB wallet installed in /opt/oracle/wallet"
+
+  - path: /usr/local/bin/pft-sqlplus
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      user="${1:-ADMIN}"
+      service="${2:-pftdev_low}"
+      wallet_dir="${TNS_ADMIN:-/opt/oracle/wallet}"
+
+      if ! command -v sqlplus >/dev/null 2>&1; then
+        echo "sqlplus is not installed. Run: sudo /usr/local/sbin/install-oracle-sqlplus.sh" >&2
+        exit 1
+      fi
+
+      if [[ ! -f "$wallet_dir/tnsnames.ora" ]]; then
+        echo "ADB wallet not found in $wallet_dir." >&2
+        echo "Copy the wallet zip to the VM, then run: sudo install-adb-wallet /path/to/Wallet_PFTDEV.zip" >&2
+        exit 1
+      fi
+
+      export TNS_ADMIN="$wallet_dir"
+      exec sqlplus "${user}@${service}"
+
+  - path: /etc/motd.d/pft-adb-wallet
+    owner: root:root
+    permissions: "0644"
+    content: |
+      Personal Finance Tracker ADB access
+
+      SQL*Plus is installed, but the ADB wallet is not stored in cloud-init.
+      After VM creation, copy Wallet_PFTDEV.zip to this VM and run:
+
+        sudo install-adb-wallet /path/to/Wallet_PFTDEV.zip
+
+      Then connect with:
+
+        pft-sqlplus ADMIN pftdev_low
+
+runcmd:
+  - [bash, /usr/local/sbin/install-docker.sh]
+  - [bash, /usr/local/sbin/install-oracle-sqlplus.sh]
+  - [bash, -lc, "echo 'PFT ADB setup reminder: copy Wallet_PFTDEV.zip to this VM, run sudo install-adb-wallet /path/to/Wallet_PFTDEV.zip, then use pft-sqlplus ADMIN pftdev_low'"]

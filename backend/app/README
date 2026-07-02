@@ -1,0 +1,14 @@
+# Backend App Runtime Notes
+
+Keep Oracle ADB wallet zips, extracted wallet files, service URLs, generated
+credentials, and downloaded wallet README files out of git.
+
+Runtime database configuration is read from environment variables:
+
+- `PFT_DB_PASSWORD`
+- `PFT_DB_USERNAME`
+- `PFT_DB_DSN`
+- `PFT_DB_WALLET_DIR`
+- `PFT_DB_WALLET_PASSWORD`
+
+Lunchflow API access is read from `LUNCHFLOW_API_KEY`.

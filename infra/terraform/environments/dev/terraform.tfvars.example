@@ -1,0 +1,12 @@
+admin_allowed_cidr = "203.0.113.10/32"
+ssh_public_key     = "ssh-ed25519 AAAA... user@example"
+
+vcn_cidr                       = "10.0.0.0/16"
+compartment_ocid               = "<compartment-ocid>"
+existing_vcn_id                = "<existing-vcn-ocid>"
+existing_public_route_table_id = "<existing-public-route-table-ocid>"
+app_subnet_cidr                = "10.0.10.0/24"
+db_subnet_cidr                 = "10.0.20.0/24"
+
+# Prefer setting this as TF_VAR_adb_admin_password instead of writing it to disk.
+adb_admin_password = "replace-with-a-strong-password"
