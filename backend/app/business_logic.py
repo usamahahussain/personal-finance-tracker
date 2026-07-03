@@ -80,16 +80,18 @@ def refresh_transactions(db: Session):
     raw_transactions = []
 
     for account in accounts:
-        db_account_id = account.lunchflow_account_id
+        db_account_id = account.account_id
+        db_lunchflow_account_id = account.lunchflow_account_id
         db_account_name = account.account_name
         db_institution_name = account.institution_name
         print("===========================")
         print("DB Account ID: ",db_account_id)
+        print("DB Lunchflow Account ID: ",db_lunchflow_account_id)
         print("DB Account Name: ",db_account_name)
         print("DB Institution Name: ",db_institution_name)
         print("===========================")
         
-        response = query_lunchflow("/"+str(db_account_id)+"/transactions")
+        response = query_lunchflow("/"+str(db_lunchflow_account_id)+"/transactions")
 
         transactions = response["transactions"]
         print("Received "+str(len(transactions))+" transactions")
