@@ -16,7 +16,7 @@ class CategoryResponse(BaseModel):
 
 class BalanceResponse(BaseModel):
     account: str
-    institution: str | None
+    institution: Optional[str] = None
     balance: float
 
     model_config = {"from_attributes": True}
