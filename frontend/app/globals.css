@@ -1,19 +1,19 @@
 :root {
-  --bg: #f5f7f2;
+  --bg: #f7f8fb;
   --surface: #ffffff;
-  --surface-muted: #eef3ed;
-  --ink: #172019;
-  --muted: #647067;
-  --line: #d8dfd6;
-  --green: #1c7c4a;
-  --green-soft: #e5f3eb;
-  --blue: #2f66b1;
-  --blue-soft: #e7eef9;
-  --amber: #a76617;
-  --amber-soft: #f7ecd9;
-  --red: #b23b3b;
-  --red-soft: #f7e4e4;
-  --shadow: 0 16px 40px rgba(30, 45, 34, 0.08);
+  --surface-muted: #f1f5f9;
+  --ink: #111827;
+  --muted: #64748b;
+  --line: #d8dee8;
+  --blue: #2563eb;
+  --blue-soft: #e8f0ff;
+  --green: #15803d;
+  --green-soft: #e8f7ee;
+  --amber: #b45309;
+  --amber-soft: #fff3d9;
+  --red: #b91c1c;
+  --red-soft: #fee7e7;
+  --shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
 }
 
 * {
@@ -28,9 +28,7 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0)),
-    var(--bg);
+  background: var(--bg);
   color: var(--ink);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -52,6 +50,10 @@ button:disabled {
   opacity: 0.62;
 }
 
+summary {
+  cursor: pointer;
+}
+
 svg {
   width: 20px;
   height: 20px;
@@ -59,7 +61,7 @@ svg {
 }
 
 .appShell {
-  width: min(1440px, 100%);
+  width: min(1480px, 100%);
   margin: 0 auto;
   padding: 24px;
 }
@@ -80,7 +82,7 @@ svg {
 }
 
 .brandMark,
-.kpiIcon,
+.metricIcon,
 .emptyIcon {
   display: grid;
   place-items: center;
@@ -89,39 +91,41 @@ svg {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  color: var(--green);
+  color: var(--blue);
 }
 
 .brandBlock p,
 .panelHeader p,
-.kpi p {
+.metric p {
   margin: 0;
   color: var(--muted);
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.3;
   text-transform: uppercase;
 }
 
 .brandBlock h1 {
   margin: 2px 0 0;
-  font-size: clamp(1.5rem, 3vw, 2.4rem);
-  line-height: 1.05;
+  font-size: 2rem;
+  line-height: 1.08;
   letter-spacing: 0;
 }
 
-.topbarActions {
+.topbarActions,
+.rowActions {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
 .iconButton,
-.primaryButton {
+.primaryButton,
+.secondaryButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
+  min-height: 42px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -129,15 +133,38 @@ svg {
 }
 
 .iconButton {
-  width: 44px;
+  width: 42px;
   padding: 0;
 }
 
-.primaryButton {
+.iconButton.success {
+  border-color: #b8dfc5;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.iconButton.danger {
+  border-color: #f2baba;
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.primaryButton,
+.secondaryButton {
   gap: 8px;
   padding: 0 16px;
+  font-weight: 800;
+}
+
+.primaryButton {
+  border-color: var(--ink);
   background: var(--ink);
   color: #ffffff;
+}
+
+.secondaryButton {
+  background: var(--blue-soft);
+  color: var(--blue);
 }
 
 .alertBar {
@@ -146,23 +173,28 @@ svg {
   gap: 10px;
   margin: 14px 0;
   padding: 12px 14px;
-  border: 1px solid #e9b5b5;
+  border: 1px solid #f0b2b2;
   border-radius: 8px;
   background: var(--red-soft);
-  color: #842b2b;
+  color: #861717;
 }
 
-.kpiGrid {
+.metricGrid,
+.routeGrid,
+.workspace {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
-  margin: 20px 0;
 }
 
-.kpi {
+.metricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 20px 0 14px;
+}
+
+.metric {
   display: flex;
   align-items: flex-start;
-  min-height: 132px;
+  min-height: 122px;
   gap: 14px;
   padding: 18px;
   border: 1px solid var(--line);
@@ -171,14 +203,15 @@ svg {
   box-shadow: var(--shadow);
 }
 
-.kpi strong {
+.metric strong {
   display: block;
   margin-top: 10px;
-  font-size: clamp(1.4rem, 2.3vw, 2rem);
-  line-height: 1.05;
+  overflow-wrap: anywhere;
+  font-size: 1.55rem;
+  line-height: 1.1;
 }
 
-.kpi span {
+.metric span {
   display: block;
   margin-top: 8px;
   color: var(--muted);
@@ -186,48 +219,142 @@ svg {
   line-height: 1.35;
 }
 
-.kpi-green .kpiIcon {
+.routeGrid {
+  grid-template-columns: repeat(7, minmax(170px, 1fr));
+  margin-bottom: 18px;
+}
+
+.routeCard {
+  min-height: 222px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.routeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.routeHeader > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.method,
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.method {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+.statusBadge {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.route-success .statusBadge {
   background: var(--green-soft);
   color: var(--green);
 }
 
-.kpi-blue .kpiIcon {
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-
-.kpi-amber .kpiIcon {
+.route-loading .statusBadge {
   background: var(--amber-soft);
   color: var(--amber);
 }
 
-.kpi-red .kpiIcon {
+.route-error .statusBadge {
   background: var(--red-soft);
   color: var(--red);
 }
 
+.routeCard code {
+  overflow-wrap: anywhere;
+  color: var(--blue);
+  font-size: 0.88rem;
+}
+
+.routeCard h3 {
+  margin: 12px 0 6px;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.routeCard p {
+  min-height: 38px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.routeMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.routeCard details,
+.rowDetails {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.routeCard summary,
+.rowDetails summary {
+  color: var(--blue);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+pre {
+  max-height: 260px;
+  overflow: auto;
+  margin: 10px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
 }
 
-.mainColumn,
-.sideRail {
-  display: grid;
-  gap: 18px;
+.widePanel {
+  grid-column: 1 / -1;
 }
 
 .panel {
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--surface);
   box-shadow: var(--shadow);
-}
-
-.compactPanel {
-  padding-bottom: 8px;
 }
 
 .panelHeader {
@@ -235,28 +362,22 @@ svg {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 72px;
+  min-height: 74px;
   padding: 18px;
   border-bottom: 1px solid var(--line);
 }
 
 .panelHeader h2 {
   margin: 4px 0 0;
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   line-height: 1.2;
   letter-spacing: 0;
-}
-
-.timestamp {
-  color: var(--muted);
-  font-size: 0.92rem;
-  white-space: nowrap;
 }
 
 .searchBox {
   display: flex;
   align-items: center;
-  width: min(320px, 44vw);
+  width: min(320px, 48vw);
   height: 42px;
   gap: 8px;
   padding: 0 12px;
@@ -266,7 +387,9 @@ svg {
   color: var(--muted);
 }
 
-.searchBox input {
+.searchBox input,
+.lookupForm input,
+.categoryRow input {
   min-width: 0;
   width: 100%;
   border: 0;
@@ -275,117 +398,110 @@ svg {
   color: var(--ink);
 }
 
-.accountList,
-.transactionTable {
+.lookupForm,
+.dataList {
   display: grid;
 }
 
-.accountRow {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 280px);
-  gap: 16px;
-  align-items: center;
-  min-height: 78px;
-  padding: 16px 18px;
+.lookupForm {
+  grid-template-columns: minmax(120px, 1fr) auto;
+  gap: 12px;
+  padding: 18px;
   border-bottom: 1px solid var(--line);
 }
 
-.accountRow:last-child,
-.tableRow:last-child {
+.lookupForm label,
+.categoryRow label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.lookupForm label span,
+.categoryRow label span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.singleResult {
+  border-top: 0;
+}
+
+.dataRow {
+  display: grid;
+  gap: 14px;
+  align-items: center;
+  min-height: 70px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dataRow:last-child {
   border-bottom: 0;
 }
 
-.accountRow strong,
-.merchantRow strong {
+.balanceRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.categoryRow {
+  grid-template-columns: 82px minmax(180px, 1fr) minmax(140px, 200px) auto;
+}
+
+.categoryRow.editing {
+  grid-template-columns: 82px minmax(180px, 1fr) minmax(140px, 200px) auto;
+  background: var(--surface-muted);
+}
+
+.dataRow strong {
   display: block;
   overflow-wrap: anywhere;
-  font-size: 1rem;
+  font-size: 0.98rem;
   line-height: 1.3;
 }
 
-.accountRow span,
-.merchantRow span {
+.dataRow small {
   display: block;
   margin-top: 4px;
+  overflow-wrap: anywhere;
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 0.85rem;
 }
 
-.accountAmount {
-  display: grid;
-  gap: 8px;
-  text-align: right;
-}
-
-.balanceTrack {
-  width: 100%;
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-muted);
-}
-
-.balanceTrack span {
-  display: block;
-  height: 100%;
-  margin: 0;
-}
-
-.balanceTrack.positive span {
-  background: var(--green);
-}
-
-.balanceTrack.negative span {
-  background: var(--red);
-}
-
-.flowGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 18px;
-}
-
-.flowMetric {
-  display: grid;
-  min-height: 112px;
-  gap: 8px;
-  align-content: center;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-muted);
-}
-
-.flowMetric span {
+.categoryId {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88rem;
+  font-weight: 800;
 }
 
-.flowMetric strong {
-  font-size: 1.35rem;
-  line-height: 1.1;
+.transactionTable {
+  overflow-x: auto;
 }
 
 .tableHead,
 .tableRow {
   display: grid;
-  grid-template-columns: 130px minmax(220px, 1.4fr) minmax(160px, 0.8fr) 120px;
+  grid-template-columns:
+    minmax(150px, 0.8fr) minmax(220px, 1.3fr) minmax(180px, 1fr)
+    130px minmax(120px, 0.6fr);
   gap: 14px;
-  align-items: center;
-  min-width: 760px;
-}
-
-.transactionTable {
-  overflow-x: auto;
-  border-top: 1px solid var(--line);
+  align-items: start;
+  min-width: 980px;
 }
 
 .tableHead {
   padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 900;
   text-transform: uppercase;
 }
 
@@ -395,18 +511,25 @@ svg {
   font-size: 0.94rem;
 }
 
+.tableRow:last-child {
+  border-bottom: 0;
+}
+
+.tableRow strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 .tableRow small {
   display: block;
-  margin-top: 3px;
-  overflow: hidden;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
   color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .amountIn,
 .amountOut {
-  font-weight: 800;
+  font-weight: 900;
   text-align: right;
   white-space: nowrap;
 }
@@ -419,6 +542,16 @@ svg {
   color: var(--red);
 }
 
+.rowDetails {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.rowDetails pre {
+  max-height: 220px;
+  min-width: 340px;
+}
+
 .emptyState {
   display: flex;
   align-items: center;
@@ -426,9 +559,9 @@ svg {
   margin: 18px;
   min-height: 112px;
   padding: 18px;
-  border: 1px dashed #bfc9bc;
+  border: 1px dashed #b8c2d1;
   border-radius: 8px;
-  background: rgba(245, 247, 242, 0.72);
+  background: var(--surface-muted);
 }
 
 .emptyState strong {
@@ -443,78 +576,20 @@ svg {
   line-height: 1.45;
 }
 
-.endpointList,
-.schemaList,
-.merchantList {
-  display: grid;
-  gap: 10px;
-  padding: 14px 18px 18px;
+@media (max-width: 1320px) {
+  .routeGrid {
+    grid-template-columns: repeat(4, minmax(170px, 1fr));
+  }
 }
 
-.endpoint {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 0.92rem;
-  font-weight: 700;
-}
-
-.endpoint.online {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.endpoint.pending {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-
-.schemaList div,
-.merchantRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 48px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.schemaList div:last-child,
-.merchantRow:last-child {
-  border-bottom: 0;
-}
-
-.schemaList div {
-  justify-content: flex-start;
-  color: var(--muted);
-}
-
-.schemaList svg {
-  color: var(--blue);
-}
-
-.merchantRow > span {
-  margin: 0;
-  color: var(--ink);
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-@media (max-width: 1180px) {
-  .kpiGrid {
+@media (max-width: 1020px) {
+  .metricGrid,
+  .workspace {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .sideRail {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .routeGrid {
+    grid-template-columns: repeat(2, minmax(170px, 1fr));
   }
 }
 
@@ -523,39 +598,52 @@ svg {
     padding: 16px;
   }
 
-  .topbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .topbarActions {
-    width: 100%;
-  }
-
-  .primaryButton {
-    flex: 1;
-  }
-
-  .kpiGrid,
-  .sideRail,
-  .flowGrid {
-    grid-template-columns: 1fr;
-  }
-
+  .topbar,
   .panelHeader {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .searchBox {
+  .topbarActions,
+  .primaryButton {
     width: 100%;
   }
 
-  .accountRow {
+  .brandBlock h1 {
+    font-size: 1.65rem;
+  }
+
+  .metricGrid,
+  .routeGrid,
+  .workspace {
     grid-template-columns: 1fr;
   }
 
-  .accountAmount {
+  .widePanel {
+    grid-column: auto;
+  }
+
+  .searchBox,
+  .lookupForm {
+    width: 100%;
+  }
+
+  .lookupForm {
+    grid-template-columns: 1fr;
+  }
+
+  .balanceRow,
+  .categoryRow,
+  .categoryRow.editing {
+    grid-template-columns: 1fr;
+  }
+
+  .rowActions {
+    justify-content: flex-start;
+  }
+
+  .amountIn,
+  .amountOut {
     text-align: left;
   }
 }

@@ -26,8 +26,12 @@ fastapi dev app.py
 
 ## Surfaced backend data
 
-- `GET /balance`: account balances by institution.
 - `GET /database`: database connectivity status.
-- `POST /refresh`: Lunchflow transaction payload preview.
+- `GET /balance`: all account balances.
+- `GET /balance/{account_id}`: one account balance by account id.
+- `POST /refresh`: Lunchflow transaction payload.
+- `GET /categories`: category list.
+- `PUT /categories/{category_id}`: update `category_name` and `budget`.
+- `DELETE /categories/{category_id}`: delete a category.
 
-The schema already includes transactions, merchants, categories, and recurring obligations. Those are represented in the dashboard as backend coverage until FastAPI exposes dedicated read endpoints for them.
+The dashboard mirrors the routes currently exposed by `backend/app/app.py`. Category creation is not shown because the backend does not currently expose `POST /categories`.

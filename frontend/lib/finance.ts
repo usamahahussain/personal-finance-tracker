@@ -1,4 +1,7 @@
-export type RawBalance = {
+export type BalanceResponse = {
+  account?: string;
+  institution?: string | null;
+  balance?: number | string | null;
   Account?: string;
   Institution?: string | null;
   Balance?: number | string | null;
@@ -9,6 +12,17 @@ export type AccountBalance = {
   account: string;
   institution: string;
   amount: number;
+};
+
+export type CategoryResponse = {
+  category_id: number;
+  category_name: string;
+  budget: number | string | null;
+};
+
+export type CategoryUpdate = {
+  category_name: string;
+  budget: number | null;
 };
 
 export type RawTransaction = {
@@ -30,6 +44,7 @@ export type Transaction = {
   date: string;
   merchant: string;
   description: string;
+  raw: RawTransaction;
 };
 
 const currency = process.env.NEXT_PUBLIC_CURRENCY || "GBP";
@@ -38,13 +53,6 @@ export const moneyFormatter = new Intl.NumberFormat("en-GB", {
   style: "currency",
   currency,
   maximumFractionDigits: 2
-});
-
-export const compactMoneyFormatter = new Intl.NumberFormat("en-GB", {
-  style: "currency",
-  currency,
-  notation: "compact",
-  maximumFractionDigits: 1
 });
 
 export function toAmount(value: number | string | null | undefined) {
@@ -60,12 +68,8 @@ export function toAmount(value: number | string | null | undefined) {
   return 0;
 }
 
-export function formatMoney(value: number) {
-  return moneyFormatter.format(value);
-}
-
-export function formatCompactMoney(value: number) {
-  return compactMoneyFormatter.format(value);
+export function formatMoney(value: number | string | null | undefined) {
+  return moneyFormatter.format(toAmount(value));
 }
 
 export function formatDateTime(value: Date | null) {
@@ -79,15 +83,21 @@ export function formatDateTime(value: Date | null) {
   }).format(value);
 }
 
-export function normaliseBalance(raw: RawBalance, index: number): AccountBalance {
-  const account = raw.Account?.trim() || `Account ${index + 1}`;
-  const institution = raw.Institution?.trim() || "Unknown";
+export function normaliseBalance(
+  raw: BalanceResponse,
+  index: number
+): AccountBalance {
+  const account = raw.account ?? raw.Account;
+  const institution = raw.institution ?? raw.Institution;
+  const balance = raw.balance ?? raw.Balance;
+  const label = account?.trim() || `Account ${index + 1}`;
+  const provider = institution?.trim() || "Unknown";
 
   return {
-    id: `${account}-${institution}-${index}`,
-    account,
-    institution,
-    amount: toAmount(raw.Balance)
+    id: `${label}-${provider}-${index}`,
+    account: label,
+    institution: provider,
+    amount: toAmount(balance)
   };
 }
 
@@ -102,39 +112,17 @@ export function normaliseTransaction(
     amount: toAmount(raw.amount),
     date: raw.date || "",
     merchant: raw.merchant?.trim() || "Unknown merchant",
-    description: raw.description?.trim() || "No description"
+    description: raw.description?.trim() || "No description",
+    raw
   };
 }
 
-export function sortByAbsoluteAmount<T extends { amount: number }>(items: T[]) {
-  return [...items].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+export function sortByName<T extends { category_name: string }>(items: T[]) {
+  return [...items].sort((a, b) =>
+    a.category_name.localeCompare(b.category_name)
+  );
 }
 
-export function groupTransactionsByMerchant(transactions: Transaction[]) {
-  const totals = new Map<
-    string,
-    {
-      merchant: string;
-      count: number;
-      amount: number;
-    }
-  >();
-
-  for (const transaction of transactions) {
-    const current =
-      totals.get(transaction.merchant) ??
-      {
-        merchant: transaction.merchant,
-        count: 0,
-        amount: 0
-      };
-
-    current.count += 1;
-    current.amount += transaction.amount;
-    totals.set(transaction.merchant, current);
-  }
-
-  return [...totals.values()].sort(
-    (a, b) => Math.abs(b.amount) - Math.abs(a.amount)
-  );
+export function sortBalances(items: AccountBalance[]) {
+  return [...items].sort((a, b) => a.account.localeCompare(b.account));
 }
