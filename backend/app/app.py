@@ -9,16 +9,17 @@ from sqlalchemy.orm import Session
 import business_logic
 from business_logic import RawTransaction
 from db_connection import get_db_session
+from schemas import BalanceResponse, CategoryResponse, CategoryUpdate
 
 app = FastAPI()
 DbSession = Annotated[Session, Depends(get_db_session)]
 
-@app.get("/balance/{account_id}")
-def get_balance(account_id: str):
-    balance = business_logic.get_account_balance(account_id)
+@app.get("/balance/{account_id}", response_model=BalanceResponse)
+def get_balance(account_id: int, db: DbSession):
+    balance = business_logic.get_account_balance(db, account_id)
     return balance
 
-@app.get("/balance")
+@app.get("/balance", response_model=list[BalanceResponse])
 def get_balances(db: DbSession) -> list[dict]:
     balances = business_logic.get_all_account_balances(db)
     return balances
@@ -35,7 +36,19 @@ def test_database_connection(db: DbSession):
     return {"status": "OK"}
 
 ###### Categories CRUD ######
-@app.get("/categories")
+@app.get("/categories", response_model=list[CategoryResponse])
 def get_categories(db: DbSession):
     categories = business_logic.get_categories(db)
     return categories
+
+@app.put("/categories/{category_id}", response_model=CategoryResponse)
+def update_category(category_id: int, payload: CategoryUpdate, db: DbSession):
+    category = business_logic.update_category(
+        db,
+        category_id,
+        payload.category_name,
+        payload.budget
+    )
+    db.commit()
+    db.refresh(category)
+    return category

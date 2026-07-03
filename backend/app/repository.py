@@ -11,6 +11,9 @@ def test_db_connection(db: Session) -> bool:
 def get_accounts(db: Session) -> list[Accounts]:
     return db.query(Accounts).all()
 
+def get_account(db: Session, account_id: int) -> Optional[Accounts]:
+    return db.query(Accounts).filter_by(account_id=account_id).first()
+
 ###### Categories CRUD ######
 
 def get_categories(db: Session) -> list[Categories]:

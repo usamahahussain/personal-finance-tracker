@@ -6,6 +6,7 @@ from repository import (
     test_db_connection,
     get_categories as repo_get_categories,
     get_category as repo_get_category,
+    get_account as repo_get_single_account,
 )
 from pydantic import BaseModel
 from datetime import datetime
@@ -40,9 +41,17 @@ def query_lunchflow(URL_appendage):
 
     return response.json()
 
-def get_account_balance(account_id):
-    response = query_lunchflow("/"+account_id+"/balance")
-    balance = response["balance"]["amount"]
+def get_account_balance(db: Session, account_id: int):
+    account = repo_get_single_account(db, account_id)
+    if account is None:
+        raise ValueError(f"Account {account_id} was not found")
+
+    response = query_lunchflow("/"+str(account.lunchflow_account_id)+"/balance")
+    balance = {
+        "account": account.account_name,
+        "institution": account.institution_name,
+        "balance": response["balance"]["amount"]
+    }
     return balance
 
 def get_all_account_balances(db: Session):
@@ -54,9 +63,9 @@ def get_all_account_balances(db: Session):
     
         balances.append(
             {
-                "Account": account.account_name,
-                "Institution": account.institution_name,
-                "Balance": response["balance"]["amount"]
+                "account": account.account_name,
+                "institution": account.institution_name,
+                "balance": response["balance"]["amount"]
             }
         )
     return balances
