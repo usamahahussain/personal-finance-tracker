@@ -3,7 +3,7 @@ from typing import Annotated
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Response
 from sqlalchemy.orm import Session
 
 import business_logic
@@ -52,3 +52,13 @@ def update_category(category_id: int, payload: CategoryUpdate, db: DbSession):
     db.commit()
     db.refresh(category)
     return category
+
+@app.delete("/categories/{category_id}", response_class=Response)
+def delete_category(category_id: int, db: DbSession):
+    business_logic.delete_category(
+        db,
+        category_id
+    )
+    db.commit()
+    return Response(status_code=204)
+

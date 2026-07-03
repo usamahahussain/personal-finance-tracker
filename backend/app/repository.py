@@ -21,3 +21,7 @@ def get_categories(db: Session) -> list[Categories]:
 
 def get_category(db: Session, category_id: int) -> Optional[Categories]:
     return db.query(Categories).filter_by(category_id=category_id).first()
+
+def delete_category(db: Session, category_id: int):
+    category = get_category(db, category_id)
+    return db.delete(category)

@@ -7,6 +7,7 @@ from repository import (
     get_categories as repo_get_categories,
     get_category as repo_get_category,
     get_account as repo_get_single_account,
+    delete_category as repo_delete_category
 )
 from pydantic import BaseModel
 from datetime import datetime
@@ -123,6 +124,13 @@ def update_category(
     category.category_name = category_name
     category.budget = category_budget
     return category
+
+def delete_category(
+        db: Session,
+        category_id: int
+):
+    repo_delete_category(db, category_id)
+    return    
 
 def test_connection(db: Session) -> bool:
     return test_db_connection(db)
