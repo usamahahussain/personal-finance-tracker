@@ -1,9 +1,10 @@
 from fastapi import FastAPI
-from business_logic import get_all_account_balances, get_account_balance, refresh_transactions, test_connection
+from business_logic import get_all_account_balances, get_account_balance, refresh_transactions, test_connection, get_categories
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from business_logic import RawTransaction
 from dotenv import load_dotenv
+from db_connection import get_db_session
 
 load_dotenv()
 
@@ -31,3 +32,9 @@ async def refresh_database() -> list[RawTransaction]:
 async def test_database_connection():
     test_connection()
     return {"status": "OK"}
+
+###### Categories CRUD ######
+@app.get("/categories")
+async def get_categories():
+    categories = get_categories()
+    return categories

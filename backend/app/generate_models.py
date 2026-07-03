@@ -3,6 +3,9 @@ import oracledb
 from sqlalchemy import create_engine, text, MetaData
 from sqlalchemy.pool import NullPool
 from db_connection import create_connection
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def generate_models():
     print("Connecting to database and reflecting schema...")

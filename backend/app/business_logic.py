@@ -1,10 +1,11 @@
 import os
 
 import requests
-from repository import get_accounts, test_db_connection
+from repository import get_accounts, test_db_connection, get_categories, get_category
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Any
+from models import Categories
 
 LUNCHFLOW_URL = os.getenv("LUNCHFLOW_URL", "https://www.lunchflow.app/api/v1/accounts")
 LUNCHFLOW_API_KEY_ENV = "LUNCHFLOW_API_KEY"
@@ -90,5 +91,12 @@ def refresh_transactions():
             ))
     return(raw_transactions)
 
-def test_connection():
-    test_db_connection()
+###### Categories CRUD ######
+def get_categories():
+    categories = get_categories()
+    return categories
+
+def update_category(category_id, category_name, category_budget):
+    category = get_category(category_id)
+    category.category_name = category_name
+    category.budget = category_budget

@@ -29,14 +29,14 @@ class Accounts(Base):
 class Categories(Base):
     __tablename__ = 'categories'
     __table_args__ = (
-        CheckConstraint('monthly_target_amount IS NULL OR monthly_target_amount >= 0', name='ck_categories_monthly_target_amount'),
+        CheckConstraint('BUDGET IS NULL OR BUDGET >=0', name='ck_categories_budget'),
         PrimaryKeyConstraint('category_id', name='pk_categories'),
         Index('uq_categories_category_name', 'category_name', unique=True)
     )
 
     category_id: Mapped[float] = mapped_column(NUMBER(19, 0, False), Identity(always=True, on_null=False, start=1, increment=1, minvalue=1, maxvalue=9999999999999999999999999999, cycle=False, cache=20, order=False), primary_key=True)
     category_name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
-    monthly_target_amount: Mapped[Optional[decimal.Decimal]] = mapped_column(NUMBER(19, 4, True))
+    budget: Mapped[Optional[decimal.Decimal]] = mapped_column(NUMBER(19, 4, True))
 
     merchant: Mapped[list['Merchants']] = relationship('Merchants', secondary='merchant_category_mappings', back_populates='category')
     transactions: Mapped[list['Transactions']] = relationship('Transactions', back_populates='category')
