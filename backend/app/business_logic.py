@@ -1,10 +1,16 @@
 import os
 
 import requests
-from repository import get_accounts, test_db_connection, get_categories, get_category
+from repository import (
+    get_accounts as repo_get_accounts,
+    test_db_connection,
+    get_categories as repo_get_categories,
+    get_category as repo_get_category,
+)
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
+from sqlalchemy.orm import Session
 from models import Categories
 
 LUNCHFLOW_URL = os.getenv("LUNCHFLOW_URL", "https://www.lunchflow.app/api/v1/accounts")
@@ -39,8 +45,8 @@ def get_account_balance(account_id):
     balance = response["balance"]["amount"]
     return balance
 
-def get_all_account_balances():
-    accounts = get_accounts()
+def get_all_account_balances(db: Session):
+    accounts = repo_get_accounts(db)
     balances = []
     for account in accounts:
         
@@ -58,8 +64,8 @@ def get_all_account_balances():
 
 ## TO-DO: Normalize merchant name
 
-def refresh_transactions():
-    accounts = get_accounts()
+def refresh_transactions(db: Session):
+    accounts = repo_get_accounts(db)
     
     raw_transactions = []
 
@@ -92,11 +98,22 @@ def refresh_transactions():
     return(raw_transactions)
 
 ###### Categories CRUD ######
-def get_categories():
-    categories = get_categories()
-    return categories
+def get_categories(db: Session) -> list[Categories]:
+    return repo_get_categories(db)
 
-def update_category(category_id, category_name, category_budget):
-    category = get_category(category_id)
+def update_category(
+    db: Session,
+    category_id: int,
+    category_name: str,
+    category_budget: Optional[float],
+) -> Categories:
+    category = repo_get_category(db, category_id)
+    if category is None:
+        raise ValueError(f"Category {category_id} was not found")
+
     category.category_name = category_name
     category.budget = category_budget
+    return category
+
+def test_connection(db: Session) -> bool:
+    return test_db_connection(db)

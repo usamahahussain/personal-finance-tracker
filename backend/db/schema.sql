@@ -24,11 +24,11 @@ CREATE TABLE merchants (
 CREATE TABLE categories (
     category_id             NUMBER(19,0) GENERATED ALWAYS AS IDENTITY,
     category_name           VARCHAR2(100) NOT NULL,
-    monthly_target_amount   NUMBER(19,4),
+    budget                  NUMBER(19,4),
     CONSTRAINT pk_categories PRIMARY KEY (category_id),
     CONSTRAINT uq_categories_category_name UNIQUE (category_name),
-    CONSTRAINT ck_categories_monthly_target_amount
-        CHECK (monthly_target_amount IS NULL OR monthly_target_amount >= 0)
+    CONSTRAINT ck_categories_budget
+        CHECK (budget IS NULL OR budget >= 0)
 );
 
 CREATE TABLE recurring_obligations (

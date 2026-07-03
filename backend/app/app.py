@@ -1,40 +1,41 @@
-from fastapi import FastAPI
-from business_logic import get_all_account_balances, get_account_balance, refresh_transactions, test_connection, get_categories
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
-from business_logic import RawTransaction
-from dotenv import load_dotenv
-from db_connection import get_db_session
+from typing import Annotated
 
+from dotenv import load_dotenv
 load_dotenv()
 
+from fastapi import Depends, FastAPI
+from sqlalchemy.orm import Session
+
+import business_logic
+from business_logic import RawTransaction
+from db_connection import get_db_session
+
 app = FastAPI()
+DbSession = Annotated[Session, Depends(get_db_session)]
 
 @app.get("/balance/{account_id}")
-async def get_balance(account_id):
-    balance = get_account_balance(account_id)
+def get_balance(account_id: str):
+    balance = business_logic.get_account_balance(account_id)
     return balance
 
 @app.get("/balance")
-async def get_balances() -> list[dict]:
-    balances = get_all_account_balances()
+def get_balances(db: DbSession) -> list[dict]:
+    balances = business_logic.get_all_account_balances(db)
     return balances
 
 @app.post("/refresh")
-async def refresh_database() -> list[RawTransaction]:
-    transactions = refresh_transactions()
-    # print(transactions)
+def refresh_database(db: DbSession) -> list[RawTransaction]:
+    transactions = business_logic.refresh_transactions(db)
+    db.commit()
     return transactions
-    # json_transactions = jsonable_encoder(transactions)
-    # return JSONResponse(content=json_transactions)
 
 @app.get("/database")
-async def test_database_connection():
-    test_connection()
+def test_database_connection(db: DbSession):
+    business_logic.test_connection(db)
     return {"status": "OK"}
 
 ###### Categories CRUD ######
 @app.get("/categories")
-async def get_categories():
-    categories = get_categories()
+def get_categories(db: DbSession):
+    categories = business_logic.get_categories(db)
     return categories

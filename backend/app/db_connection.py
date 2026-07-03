@@ -1,9 +1,10 @@
 import os
+from collections.abc import Generator
 
 import oracledb
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 def required_env(name):
     value = os.getenv(name)
@@ -34,9 +35,15 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-def get_db_session() -> Session:
+def create_connection():
+    return engine
+
+def get_db_session() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
