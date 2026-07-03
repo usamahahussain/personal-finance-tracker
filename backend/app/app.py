@@ -3,6 +3,9 @@ from business_logic import get_all_account_balances, get_account_balance, refres
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from business_logic import RawTransaction
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
