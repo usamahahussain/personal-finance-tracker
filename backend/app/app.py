@@ -62,3 +62,14 @@ def delete_category(category_id: int, db: DbSession):
     db.commit()
     return Response(status_code=204)
 
+@app.post("/categories", response_model=CategoryResponse)
+def create_category(payload: CategoryUpdate, db: DbSession):
+    new_category = business_logic.create_category(
+        db,
+        payload.category_name,
+        payload.budget
+    )
+    db.commit()
+    db.refresh(new_category)
+    return new_category
+

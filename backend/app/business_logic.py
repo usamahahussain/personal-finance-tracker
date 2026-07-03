@@ -7,7 +7,8 @@ from repository import (
     get_categories as repo_get_categories,
     get_category as repo_get_category,
     get_account as repo_get_single_account,
-    delete_category as repo_delete_category
+    delete_category as repo_delete_category,
+    create_category as repo_create_category
 )
 from pydantic import BaseModel
 from datetime import datetime
@@ -133,6 +134,13 @@ def delete_category(
 ):
     repo_delete_category(db, category_id)
     return    
+
+def create_category(
+        db: Session,
+        category_name: str,
+        category_budget: Optional[float]
+) -> Categories:
+    return repo_create_category(db, category_name, category_budget)
 
 def test_connection(db: Session) -> bool:
     return test_db_connection(db)

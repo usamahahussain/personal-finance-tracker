@@ -25,3 +25,12 @@ def get_category(db: Session, category_id: int) -> Optional[Categories]:
 def delete_category(db: Session, category_id: int):
     category = get_category(db, category_id)
     return db.delete(category)
+
+def create_category(db: Session, category_name: str, category_budget: Optional[float]):
+    category = Categories(
+        category_name = category_name,
+        budget = category_budget
+    )
+    db.add(category)
+    db.flush()
+    return category
