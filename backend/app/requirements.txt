@@ -1,5 +1,5 @@
 fastapi[standard]
 requests
 oracledb
-SQLAlchemy
+SQLAlchemy>=2.1.0b3,<2.2
 python-dotenv

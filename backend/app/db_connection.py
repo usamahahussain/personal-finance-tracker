@@ -5,6 +5,9 @@ import oracledb
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import Session, sessionmaker
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def required_env(name):
     value = os.getenv(name)
