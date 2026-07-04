@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 import business_logic
 from business_logic import RawTransaction
 from db_connection import get_db_session
-from schemas import BalanceResponse, CategoryResponse, CategoryUpdate
+from schemas import BalanceResponse, CategoryResponse, CategoryUpdate, TransactionResponse
 
 app = FastAPI()
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -24,18 +24,12 @@ def get_balances(db: DbSession) -> list[dict]:
     balances = business_logic.get_all_account_balances(db)
     return balances
 
-@app.post("/refresh")
-def refresh_database(db: DbSession) -> list[RawTransaction]:
-    transactions = business_logic.refresh_transactions(db)
-    db.commit()
-    return transactions
-
 @app.get("/database")
 def test_database_connection(db: DbSession):
     business_logic.test_connection(db)
     return {"status": "OK"}
 
-###### Categories CRUD ######
+################## Categories CRUD ##################
 @app.get("/categories", response_model=list[CategoryResponse])
 def get_categories(db: DbSession):
     categories = business_logic.get_categories(db)
@@ -73,3 +67,16 @@ def create_category(payload: CategoryUpdate, db: DbSession):
     db.refresh(new_category)
     return new_category
 
+################## Transactions ##################
+@app.get("/transactions", response_model=list[TransactionResponse])
+def get_transactions(db: DbSession):
+    transactions = business_logic.get_transactions(
+        db
+    )
+    return transactions
+
+@app.post("/refresh")
+def refresh_database(db: DbSession):
+    result = business_logic.refresh_transactions(db)
+    db.commit()
+    return result

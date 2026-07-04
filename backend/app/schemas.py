@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 ## Expected input model for category update
 class CategoryUpdate(BaseModel):
@@ -20,3 +21,12 @@ class BalanceResponse(BaseModel):
     balance: float
 
     model_config = {"from_attributes": True}
+
+class TransactionResponse(BaseModel):
+    account_id: int
+    amount: float
+    transaction_date: datetime
+    direction: str
+    merchant_name: str
+    category_id: Optional[int] = None
+    reference: Optional[str] = None

@@ -8,13 +8,15 @@ from repository import (
     get_category as repo_get_category,
     get_account as repo_get_single_account,
     delete_category as repo_delete_category,
-    create_category as repo_create_category
+    create_category as repo_create_category,
+    get_transactions as repo_get_transactions,
+    refresh_transactions as repo_refresh_transactions
 )
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Any, Optional
 from sqlalchemy.orm import Session
-from models import Categories
+from models import Categories, Transactions
 
 LUNCHFLOW_URL = os.getenv("LUNCHFLOW_URL", "https://www.lunchflow.app/api/v1/accounts")
 LUNCHFLOW_API_KEY_ENV = "LUNCHFLOW_API_KEY"
@@ -28,7 +30,7 @@ class RawTransaction(BaseModel):
     merchant: str
     description: str
     full_json: dict[str, Any]
-    
+
 def query_lunchflow(URL_appendage):
     api_key = os.getenv(LUNCHFLOW_API_KEY_ENV)
     if not api_key:
@@ -60,9 +62,9 @@ def get_all_account_balances(db: Session):
     accounts = repo_get_accounts(db)
     balances = []
     for account in accounts:
-        
+
         response = query_lunchflow("/"+str(account.lunchflow_account_id)+"/balance")
-    
+
         balances.append(
             {
                 "account": account.account_name,
@@ -72,43 +74,6 @@ def get_all_account_balances(db: Session):
         )
     return balances
 
-
-## TO-DO: Normalize merchant name
-
-def refresh_transactions(db: Session):
-    accounts = repo_get_accounts(db)
-    
-    raw_transactions = []
-
-    for account in accounts:
-        db_account_id = account.account_id
-        db_lunchflow_account_id = account.lunchflow_account_id
-        db_account_name = account.account_name
-        db_institution_name = account.institution_name
-        print("===========================")
-        print("DB Account ID: ",db_account_id)
-        print("DB Lunchflow Account ID: ",db_lunchflow_account_id)
-        print("DB Account Name: ",db_account_name)
-        print("DB Institution Name: ",db_institution_name)
-        print("===========================")
-        
-        response = query_lunchflow("/"+str(db_lunchflow_account_id)+"/transactions")
-
-        transactions = response["transactions"]
-        print("Received "+str(len(transactions))+" transactions")
-        for transaction in transactions:
-            raw_transactions.append(
-                RawTransaction(
-                    lunchflow_transaction_id=transaction["id"],
-                    account_id=db_account_id,
-                    account_name=db_account_name,
-                    amount=transaction["amount"],
-                    date=datetime.strptime(transaction["date"], "%Y-%m-%d"),
-                    merchant=transaction["merchant"], ## TO-DO: Normalize merchant name
-                    description=transaction["description"],
-                    full_json=transaction
-            ))
-    return(raw_transactions)
 
 ###### Categories CRUD ######
 def get_categories(db: Session) -> list[Categories]:
@@ -133,7 +98,7 @@ def delete_category(
         category_id: int
 ):
     repo_delete_category(db, category_id)
-    return    
+    return
 
 def create_category(
         db: Session,
@@ -144,3 +109,46 @@ def create_category(
 
 def test_connection(db: Session) -> bool:
     return test_db_connection(db)
+
+
+###### Transactions ######
+def get_transactions(db: Session) -> Optional[list[Transactions]]:
+    return repo_get_transactions(db)
+
+
+def refresh_transactions(db: Session):
+    accounts = repo_get_accounts(db)
+
+    raw_transactions = []
+
+    for account in accounts:
+        db_account_id = account.account_id
+        db_lunchflow_account_id = account.lunchflow_account_id
+        db_account_name = account.account_name
+        db_institution_name = account.institution_name
+        print("===========================")
+        print("DB Account ID: ",db_account_id)
+        print("DB Lunchflow Account ID: ",db_lunchflow_account_id)
+        print("DB Account Name: ",db_account_name)
+        print("DB Institution Name: ",db_institution_name)
+        print("===========================")
+
+        response = query_lunchflow("/"+str(db_lunchflow_account_id)+"/transactions")
+
+        transactions = response["transactions"]
+        print("Received "+str(len(transactions))+" transactions")
+        for transaction in transactions:
+            raw_transactions.append(
+                RawTransaction(
+                    lunchflow_transaction_id=transaction["id"],
+                    account_id=db_account_id,
+                    account_name=db_account_name,
+                    amount=transaction["amount"],
+                    date=datetime.strptime(transaction["date"], "%Y-%m-%d"),
+                    merchant=transaction["merchant"], ## TO-DO: Normalize merchant name
+                    description=transaction["description"],
+                    full_json=transaction
+            ))
+
+    response = repo_refresh_transactions(db, raw_transactions)
+    return(response)
