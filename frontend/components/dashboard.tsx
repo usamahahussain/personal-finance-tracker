@@ -15,88 +15,89 @@ import {
   WalletCards,
   X
 } from "lucide-react";
+import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AccountBalance,
+  ApiError,
   BalanceResponse,
   CategoryResponse,
   CategoryUpdate,
-  RawTransaction,
-  Transaction,
+  RefreshResponse,
+  TransactionResponse,
+  apiRequest,
+  formatDate,
   formatDateTime,
   formatMoney,
-  normaliseBalance,
-  normaliseTransaction,
-  sortBalances,
-  sortByName,
-  toAmount
+  formatPayload,
+  formatSignedTransaction,
+  toNumber
 } from "@/lib/finance";
 
-type HealthState = "checking" | "online" | "offline";
+type RouteKey =
+  | "database"
+  | "balances"
+  | "balanceDetail"
+  | "categories"
+  | "categoryCreate"
+  | "categoryUpdate"
+  | "categoryDelete"
+  | "transactions"
+  | "refresh";
+
 type RouteState = "idle" | "loading" | "success" | "error";
 
-type ApiResult<T> = {
-  data: T;
-  status: number;
-};
-
-type RouteLog = {
-  method: string;
+type RouteDefinition = {
+  key: RouteKey;
+  method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
   label: string;
+};
+
+type RouteLog = RouteDefinition & {
   state: RouteState;
-  detail: string;
+  status: number | null;
   updatedAt: Date | null;
+  detail: string;
   payload: unknown;
 };
 
-type DraftCategory = {
+type CategoryDraft = {
   category_name: string;
   budget: string;
 };
 
-class ApiError extends Error {
-  status: number;
-  payload: unknown;
+type HealthState = "checking" | "online" | "offline";
 
-  constructor(message: string, status: number, payload: unknown) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.payload = payload;
-  }
-}
-
-const routeDefinitions = [
+const routeDefinitions: RouteDefinition[] = [
   {
     key: "database",
     method: "GET",
     path: "/database",
-    label: "Database status"
+    label: "Database"
   },
   {
     key: "balances",
     method: "GET",
     path: "/balance",
-    label: "All account balances"
+    label: "Balances"
   },
   {
     key: "balanceDetail",
     method: "GET",
     path: "/balance/{account_id}",
-    label: "Single account balance"
-  },
-  {
-    key: "refresh",
-    method: "POST",
-    path: "/refresh",
-    label: "Refresh transactions"
+    label: "Account balance"
   },
   {
     key: "categories",
     method: "GET",
     path: "/categories",
-    label: "List categories"
+    label: "Categories"
+  },
+  {
+    key: "categoryCreate",
+    method: "POST",
+    path: "/categories",
+    label: "Create category"
   },
   {
     key: "categoryUpdate",
@@ -109,70 +110,97 @@ const routeDefinitions = [
     method: "DELETE",
     path: "/categories/{category_id}",
     label: "Delete category"
+  },
+  {
+    key: "transactions",
+    method: "GET",
+    path: "/transactions",
+    label: "Transactions"
+  },
+  {
+    key: "refresh",
+    method: "POST",
+    path: "/refresh",
+    label: "Refresh"
   }
-] as const;
+];
 
-type RouteKey = (typeof routeDefinitions)[number]["key"];
+function createInitialRouteLogs() {
+  return routeDefinitions.reduce(
+    (logs, route) => ({
+      ...logs,
+      [route.key]: {
+        ...route,
+        state: "idle",
+        status: null,
+        updatedAt: null,
+        detail: "Not called",
+        payload: null
+      }
+    }),
+    {} as Record<RouteKey, RouteLog>
+  );
+}
 
-const initialRouteLogs = routeDefinitions.reduce(
-  (logs, route) => ({
-    ...logs,
-    [route.key]: {
-      method: route.method,
-      path: route.path,
-      label: route.label,
-      state: "idle",
-      detail: "Not called",
-      updatedAt: null,
-      payload: null
-    }
-  }),
-  {} as Record<RouteKey, RouteLog>
-);
+function parseCategoryDraft(
+  draft: CategoryDraft
+): { ok: true; payload: CategoryUpdate } | { ok: false; error: string } {
+  const categoryName = draft.category_name.trim();
 
-async function apiRequest<T>(
-  path: string,
-  init?: RequestInit
-): Promise<ApiResult<T>> {
-  const response = await fetch(`/api/backend/${path}`, {
-    ...init,
-    cache: "no-store",
-    headers: {
-      accept: "application/json",
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-      ...(init?.headers ?? {})
-    }
-  });
-
-  const text = await response.text();
-  let payload: unknown = null;
-
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = text;
-    }
+  if (!categoryName) {
+    return { ok: false, error: "Category name is required." };
   }
 
-  if (!response.ok) {
-    const detail =
-      typeof payload === "object" && payload && "detail" in payload
-        ? String((payload as { detail?: unknown }).detail)
-        : typeof payload === "object" && payload && "error" in payload
-          ? String((payload as { error?: unknown }).error)
-          : `Request failed with status ${response.status}`;
+  const budgetText = draft.budget.trim();
 
-    throw new ApiError(detail, response.status, payload);
+  if (!budgetText) {
+    return {
+      ok: true,
+      payload: {
+        category_name: categoryName,
+        budget: null
+      }
+    };
+  }
+
+  const budget = Number(budgetText);
+
+  if (!Number.isFinite(budget)) {
+    return { ok: false, error: "Budget must be a number." };
   }
 
   return {
-    data: payload as T,
-    status: response.status
+    ok: true,
+    payload: {
+      category_name: categoryName,
+      budget
+    }
   };
 }
 
-function routeStatusLabel(state: RouteState) {
+function categoryDraft(category: CategoryResponse): CategoryDraft {
+  return {
+    category_name: category.category_name,
+    budget:
+      category.budget === null || typeof category.budget === "undefined"
+        ? ""
+        : String(category.budget)
+  };
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    return `${error.status}: ${error.message}`;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+function stateLabel(state: RouteState) {
   if (state === "loading") {
     return "Loading";
   }
@@ -188,7 +216,7 @@ function routeStatusLabel(state: RouteState) {
   return "Idle";
 }
 
-function statusLabel(state: HealthState) {
+function healthLabel(state: HealthState) {
   if (state === "checking") {
     return "Checking";
   }
@@ -196,778 +224,667 @@ function statusLabel(state: HealthState) {
   return state === "online" ? "Online" : "Offline";
 }
 
-function formatPayload(payload: unknown) {
-  if (payload === null || typeof payload === "undefined") {
-    return "No response body";
-  }
-
-  if (typeof payload === "string") {
-    return payload;
-  }
-
-  return JSON.stringify(payload, null, 2);
-}
-
-function countPayload(payload: unknown, singular: string, plural: string) {
-  return Array.isArray(payload)
-    ? `${payload.length} ${payload.length === 1 ? singular : plural}`
-    : null;
-}
-
-function ErrorMessage({ error }: { error: string | null }) {
-  if (!error) {
-    return null;
-  }
-
+function Stat({
+  label,
+  value,
+  icon
+}: {
+  label: string;
+  value: string;
+  icon: ReactNode;
+}) {
   return (
-    <section className="alertBar" role="status">
-      <AlertCircle aria-hidden="true" />
-      <span>{error}</span>
-    </section>
+    <div className="statItem">
+      <span className="statIcon" aria-hidden="true">
+        {icon}
+      </span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+    </div>
   );
 }
 
 function EmptyState({
   icon,
-  title,
-  detail
+  title
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
-  detail: string;
 }) {
   return (
     <div className="emptyState">
-      <div className="emptyIcon" aria-hidden="true">
+      <span className="emptyIcon" aria-hidden="true">
         {icon}
-      </div>
-      <div>
-        <strong>{title}</strong>
-        <p>{detail}</p>
-      </div>
-    </div>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  detail,
-  icon
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <article className="metric">
-      <div className="metricIcon" aria-hidden="true">
-        {icon}
-      </div>
-      <div>
-        <p>{label}</p>
-        <strong>{value}</strong>
-        <span>{detail}</span>
-      </div>
-    </article>
-  );
-}
-
-function RouteCard({ route }: { route: RouteLog }) {
-  const payloadCount =
-    countPayload(route.payload, "item", "items") ??
-    (route.payload ? "Response body" : "No body");
-
-  return (
-    <article className={`routeCard route-${route.state}`}>
-      <div className="routeHeader">
-        <div>
-          <span className="method">{route.method}</span>
-          <code>{route.path}</code>
-        </div>
-        <span className="statusBadge">{routeStatusLabel(route.state)}</span>
-      </div>
-      <h3>{route.label}</h3>
-      <p>{route.detail}</p>
-      <div className="routeMeta">
-        <span>{payloadCount}</span>
-        <span>{formatDateTime(route.updatedAt)}</span>
-      </div>
-      <details>
-        <summary>Response</summary>
-        <pre>{formatPayload(route.payload)}</pre>
-      </details>
-    </article>
-  );
-}
-
-function BalanceRow({ balance }: { balance: AccountBalance }) {
-  return (
-    <div className="dataRow balanceRow">
-      <span>
-        <strong>{balance.account}</strong>
-        <small>{balance.institution}</small>
       </span>
-      <span>{formatMoney(balance.amount)}</span>
-    </div>
-  );
-}
-
-function CategoryRow({
-  category,
-  isEditing,
-  draft,
-  saving,
-  deleting,
-  onEdit,
-  onDraftChange,
-  onCancel,
-  onSave,
-  onDelete
-}: {
-  category: CategoryResponse;
-  isEditing: boolean;
-  draft: DraftCategory;
-  saving: boolean;
-  deleting: boolean;
-  onEdit: () => void;
-  onDraftChange: (draft: DraftCategory) => void;
-  onCancel: () => void;
-  onSave: () => void;
-  onDelete: () => void;
-}) {
-  if (isEditing) {
-    return (
-      <div className="dataRow categoryRow editing">
-        <span className="categoryId">#{category.category_id}</span>
-        <label>
-          <span>Name</span>
-          <input
-            value={draft.category_name}
-            onChange={(event) =>
-              onDraftChange({
-                ...draft,
-                category_name: event.target.value
-              })
-            }
-          />
-        </label>
-        <label>
-          <span>Budget</span>
-          <input
-            inputMode="decimal"
-            placeholder="No budget"
-            value={draft.budget}
-            onChange={(event) =>
-              onDraftChange({
-                ...draft,
-                budget: event.target.value
-              })
-            }
-          />
-        </label>
-        <div className="rowActions">
-          <button
-            className="iconButton success"
-            type="button"
-            title="Save category"
-            aria-label={`Save ${category.category_name}`}
-            disabled={saving}
-            onClick={onSave}
-          >
-            <Save aria-hidden="true" />
-          </button>
-          <button
-            className="iconButton"
-            type="button"
-            title="Cancel edit"
-            aria-label="Cancel edit"
-            disabled={saving}
-            onClick={onCancel}
-          >
-            <X aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="dataRow categoryRow">
-      <span className="categoryId">#{category.category_id}</span>
-      <span>
-        <strong>{category.category_name}</strong>
-        <small>category_name</small>
-      </span>
-      <span>
-        <strong>
-          {category.budget === null ? "No budget" : formatMoney(category.budget)}
-        </strong>
-        <small>budget</small>
-      </span>
-      <div className="rowActions">
-        <button
-          className="iconButton"
-          type="button"
-          title="Edit category"
-          aria-label={`Edit ${category.category_name}`}
-          onClick={onEdit}
-        >
-          <Pencil aria-hidden="true" />
-        </button>
-        <button
-          className="iconButton danger"
-          type="button"
-          title="Delete category"
-          aria-label={`Delete ${category.category_name}`}
-          disabled={deleting}
-          onClick={onDelete}
-        >
-          <Trash2 aria-hidden="true" />
-        </button>
-      </div>
+      <strong>{title}</strong>
     </div>
   );
 }
 
 export function Dashboard() {
-  const [routeLogs, setRouteLogs] =
-    useState<Record<RouteKey, RouteLog>>(initialRouteLogs);
-  const [balances, setBalances] = useState<AccountBalance[]>([]);
-  const [singleBalance, setSingleBalance] = useState<AccountBalance | null>(
+  const [health, setHealth] = useState<HealthState>("checking");
+  const [balances, setBalances] = useState<BalanceResponse[]>([]);
+  const [selectedBalance, setSelectedBalance] = useState<BalanceResponse | null>(
     null
   );
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [health, setHealth] = useState<HealthState>("checking");
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
-  const [accountId, setAccountId] = useState("");
-  const [query, setQuery] = useState("");
-  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(
-    null
-  );
-  const [categoryDraft, setCategoryDraft] = useState<DraftCategory>({
+  const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
+  const [routeLogs, setRouteLogs] = useState(createInitialRouteLogs);
+  const [accountId, setAccountId] = useState("1");
+  const [newCategory, setNewCategory] = useState<CategoryDraft>({
     category_name: "",
     budget: ""
   });
-  const [savingCategoryId, setSavingCategoryId] = useState<number | null>(null);
-  const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(
-    null
-  );
+  const [categoryDrafts, setCategoryDrafts] = useState<
+    Record<number, CategoryDraft>
+  >({});
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const updateRoute = useCallback(
-    (key: RouteKey, patch: Partial<RouteLog>) => {
+  const runRoute = useCallback(
+    async <T,>(
+      key: RouteKey,
+      actualPath: string,
+      init?: RequestInit
+    ): Promise<T | undefined> => {
+      const route = routeDefinitions.find((item) => item.key === key);
+
+      if (!route) {
+        setError(`Unknown route: ${key}`);
+        return undefined;
+      }
+
+      setError(null);
+      setNotice(null);
       setRouteLogs((current) => ({
         ...current,
         [key]: {
           ...current[key],
-          ...patch
+          state: "loading",
+          detail: `Calling ${actualPath}`,
+          updatedAt: new Date(),
+          payload: null
         }
       }));
+
+      try {
+        const result = await apiRequest<T>(actualPath, init);
+        setRouteLogs((current) => ({
+          ...current,
+          [key]: {
+            ...current[key],
+            state: "success",
+            status: result.status,
+            detail: `${route.method} ${actualPath}`,
+            updatedAt: new Date(),
+            payload: result.data
+          }
+        }));
+        setNotice(`${route.label} completed.`);
+        return result.data;
+      } catch (requestError) {
+        const message = getErrorMessage(requestError);
+        const payload =
+          requestError instanceof ApiError ? requestError.payload : message;
+        const status =
+          requestError instanceof ApiError ? requestError.status : null;
+
+        setRouteLogs((current) => ({
+          ...current,
+          [key]: {
+            ...current[key],
+            state: "error",
+            status,
+            detail: message,
+            updatedAt: new Date(),
+            payload
+          }
+        }));
+        setError(message);
+        return undefined;
+      }
     },
     []
   );
 
-  const runRoute = useCallback(
-    async <T,>(key: RouteKey, path: string, init?: RequestInit) => {
-      updateRoute(key, {
-        state: "loading",
-        detail: "Request in progress",
-        updatedAt: new Date()
-      });
+  const checkDatabase = useCallback(async () => {
+    const result = await runRoute<{ status: string }>("database", "/database");
+    setHealth(result?.status === "OK" ? "online" : "offline");
+  }, [runRoute]);
 
-      try {
-        const result = await apiRequest<T>(path, init);
-        updateRoute(key, {
-          state: "success",
-          detail:
-            result.status === 204
-              ? "204 No Content"
-              : `${result.status} response received`,
-          updatedAt: new Date(),
-          payload: result.data
-        });
-        return result.data;
-      } catch (routeError) {
-        const message =
-          routeError instanceof Error ? routeError.message : "Request failed";
-        updateRoute(key, {
-          state: "error",
-          detail:
-            routeError instanceof ApiError
-              ? `${routeError.status} ${message}`
-              : message,
-          updatedAt: new Date(),
-          payload: routeError instanceof ApiError ? routeError.payload : null
-        });
-        throw routeError;
-      }
-    },
-    [updateRoute]
-  );
+  const loadBalances = useCallback(async () => {
+    const result = await runRoute<BalanceResponse[]>("balances", "/balance");
 
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    if (result) {
+      setBalances(result);
+    }
+  }, [runRoute]);
 
-    const [databaseResult, balanceResult, categoriesResult] =
-      await Promise.allSettled([
-        runRoute<{ status?: string }>("database", "database"),
-        runRoute<BalanceResponse[]>("balances", "balance"),
-        runRoute<CategoryResponse[]>("categories", "categories")
-      ]);
+  const loadBalance = useCallback(async () => {
+    const id = Number(accountId);
 
-    if (databaseResult.status === "fulfilled") {
-      setHealth(
-        databaseResult.value.status?.toUpperCase() === "OK"
-          ? "online"
-          : "offline"
-      );
-    } else {
-      setHealth("offline");
-      setError(
-        databaseResult.reason instanceof Error
-          ? databaseResult.reason.message
-          : "Database check failed"
-      );
+    if (!Number.isInteger(id) || id <= 0) {
+      setError("Account ID must be a positive integer.");
+      return;
     }
 
-    if (balanceResult.status === "fulfilled") {
-      setBalances(balanceResult.value.map(normaliseBalance));
-    } else {
-      setBalances([]);
-      setError(
-        balanceResult.reason instanceof Error
-          ? balanceResult.reason.message
-          : "Balance request failed"
+    const result = await runRoute<BalanceResponse>(
+      "balanceDetail",
+      `/balance/${id}`
+    );
+
+    if (result) {
+      setSelectedBalance(result);
+    }
+  }, [accountId, runRoute]);
+
+  const loadCategories = useCallback(async () => {
+    const result = await runRoute<CategoryResponse[]>(
+      "categories",
+      "/categories"
+    );
+
+    if (result) {
+      const sorted = [...result].sort((a, b) =>
+        a.category_name.localeCompare(b.category_name)
+      );
+      setCategories(sorted);
+      setCategoryDrafts(
+        Object.fromEntries(
+          sorted.map((category) => [category.category_id, categoryDraft(category)])
+        )
       );
     }
+  }, [runRoute]);
 
-    if (categoriesResult.status === "fulfilled") {
-      setCategories(sortByName(categoriesResult.value));
-    } else {
-      setCategories([]);
-      setError(
-        categoriesResult.reason instanceof Error
-          ? categoriesResult.reason.message
-          : "Category request failed"
-      );
+  const loadTransactions = useCallback(async () => {
+    const result = await runRoute<TransactionResponse[]>(
+      "transactions",
+      "/transactions"
+    );
+
+    if (result) {
+      setTransactions(result);
     }
-
-    setLastLoaded(new Date());
-    setLoading(false);
   }, [runRoute]);
 
   useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
+    void checkDatabase();
+    void loadCategories();
+    void loadTransactions();
+  }, [checkDatabase, loadCategories, loadTransactions]);
 
-  const refreshTransactions = async () => {
-    setSyncing(true);
-    setError(null);
-
-    try {
-      const payload = await runRoute<RawTransaction[]>("refresh", "refresh", {
-        method: "POST"
-      });
-      setTransactions(payload.map(normaliseTransaction));
-      await loadDashboard();
-    } catch (refreshError) {
-      setError(
-        refreshError instanceof Error ? refreshError.message : "Refresh failed"
-      );
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const lookupBalance = async () => {
-    const trimmedId = accountId.trim();
-    if (!trimmedId) {
-      setError("Enter an account_id before calling GET /balance/{account_id}");
-      return;
-    }
-
-    setError(null);
-
-    try {
-      const payload = await runRoute<BalanceResponse>(
-        "balanceDetail",
-        `balance/${encodeURIComponent(trimmedId)}`
-      );
-      setSingleBalance(normaliseBalance(payload, 0));
-    } catch (lookupError) {
-      setSingleBalance(null);
-      setError(
-        lookupError instanceof Error
-          ? lookupError.message
-          : "Balance lookup failed"
-      );
-    }
-  };
-
-  const startCategoryEdit = (category: CategoryResponse) => {
-    setEditingCategoryId(category.category_id);
-    setCategoryDraft({
-      category_name: category.category_name,
-      budget: category.budget === null ? "" : String(category.budget)
-    });
-  };
-
-  const cancelCategoryEdit = () => {
-    setEditingCategoryId(null);
-    setCategoryDraft({
-      category_name: "",
-      budget: ""
-    });
-  };
-
-  const saveCategory = async (categoryId: number) => {
-    const categoryName = categoryDraft.category_name.trim();
-    const budgetText = categoryDraft.budget.trim();
-    const budget = budgetText === "" ? null : Number(budgetText);
-
-    if (!categoryName) {
-      setError("category_name is required");
-      return;
-    }
-
-    if (budgetText !== "" && !Number.isFinite(budget)) {
-      setError("budget must be a number or empty");
-      return;
-    }
-
-    setSavingCategoryId(categoryId);
-    setError(null);
-
-    try {
-      const payload: CategoryUpdate = {
-        category_name: categoryName,
-        budget
-      };
-      const updated = await runRoute<CategoryResponse>(
-        "categoryUpdate",
-        `categories/${categoryId}`,
-        {
-          method: "PUT",
-          body: JSON.stringify(payload)
-        }
-      );
-      setCategories((current) =>
-        sortByName(
-          current.map((category) =>
-            category.category_id === categoryId ? updated : category
-          )
-        )
-      );
-      cancelCategoryEdit();
-    } catch (saveError) {
-      setError(
-        saveError instanceof Error ? saveError.message : "Category update failed"
-      );
-    } finally {
-      setSavingCategoryId(null);
-    }
-  };
-
-  const deleteCategory = async (category: CategoryResponse) => {
-    const confirmed = window.confirm(
-      `Delete category "${category.category_name}"?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingCategoryId(category.category_id);
-    setError(null);
-
-    try {
-      await runRoute<null>("categoryDelete", `categories/${category.category_id}`, {
-        method: "DELETE"
-      });
-      setCategories((current) =>
-        current.filter((item) => item.category_id !== category.category_id)
-      );
-      if (editingCategoryId === category.category_id) {
-        cancelCategoryEdit();
-      }
-    } catch (deleteError) {
-      setError(
-        deleteError instanceof Error ? deleteError.message : "Delete failed"
-      );
-    } finally {
-      setDeletingCategoryId(null);
-    }
-  };
-
-  const totalBalance = useMemo(
-    () => balances.reduce((total, account) => total + account.amount, 0),
+  const balanceTotal = useMemo(
+    () => balances.reduce((total, balance) => total + toNumber(balance.balance), 0),
     [balances]
   );
 
-  const budgetTotal = useMemo(
-    () =>
-      categories.reduce(
-        (total, category) => total + toAmount(category.budget),
-        0
-      ),
-    [categories]
+  const recentTransactions = useMemo(
+    () => transactions.slice(0, 25),
+    [transactions]
   );
 
-  const filteredBalances = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    const sorted = sortBalances(balances);
+  async function refreshTransactions() {
+    const result = await runRoute<RefreshResponse>("refresh", "/refresh", {
+      method: "POST"
+    });
 
-    if (!term) {
-      return sorted;
+    if (result) {
+      await loadTransactions();
+    }
+  }
+
+  async function createCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const parsed = parseCategoryDraft(newCategory);
+
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
     }
 
-    return sorted.filter((account) =>
-      `${account.account} ${account.institution}`.toLowerCase().includes(term)
-    );
-  }, [balances, query]);
+    const result = await runRoute<CategoryResponse>("categoryCreate", "/categories", {
+      method: "POST",
+      body: JSON.stringify(parsed.payload)
+    });
 
-  const routeLogList = useMemo(
-    () => routeDefinitions.map((route) => routeLogs[route.key]),
-    [routeLogs]
-  );
+    if (result) {
+      setNewCategory({ category_name: "", budget: "" });
+      setCategories((current) =>
+        [...current, result].sort((a, b) =>
+          a.category_name.localeCompare(b.category_name)
+        )
+      );
+      setCategoryDrafts((current) => ({
+        ...current,
+        [result.category_id]: categoryDraft(result)
+      }));
+    }
+  }
+
+  async function updateCategory(categoryId: number) {
+    const draft = categoryDrafts[categoryId];
+
+    if (!draft) {
+      setError("Category draft was not found.");
+      return;
+    }
+
+    const parsed = parseCategoryDraft(draft);
+
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+
+    const result = await runRoute<CategoryResponse>(
+      "categoryUpdate",
+      `/categories/${categoryId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(parsed.payload)
+      }
+    );
+
+    if (result) {
+      setCategories((current) =>
+        current
+          .map((category) =>
+            category.category_id === categoryId ? result : category
+          )
+          .sort((a, b) => a.category_name.localeCompare(b.category_name))
+      );
+      setCategoryDrafts((current) => ({
+        ...current,
+        [categoryId]: categoryDraft(result)
+      }));
+    }
+  }
+
+  async function deleteCategory(categoryId: number) {
+    const result = await runRoute<null>(
+      "categoryDelete",
+      `/categories/${categoryId}`,
+      {
+        method: "DELETE"
+      }
+    );
+
+    if (typeof result !== "undefined") {
+      setCategories((current) =>
+        current.filter((category) => category.category_id !== categoryId)
+      );
+      setCategoryDrafts((current) => {
+        const next = { ...current };
+        delete next[categoryId];
+        return next;
+      });
+    }
+  }
 
   return (
     <main className="appShell">
       <header className="topbar">
-        <div className="brandBlock">
-          <div className="brandMark" aria-hidden="true">
+        <div className="brand">
+          <span className="brandMark" aria-hidden="true">
             <WalletCards />
-          </div>
+          </span>
           <div>
             <p>Personal Finance Tracker</p>
-            <h1>API Console</h1>
+            <h1>Backend Dashboard</h1>
           </div>
         </div>
 
         <div className="topbarActions">
+          <span className={`healthBadge ${health}`}>
+            {health === "online" ? <CheckCircle2 /> : <AlertCircle />}
+            {healthLabel(health)}
+          </span>
           <button
-            className="iconButton"
+            className="secondaryButton"
             type="button"
-            onClick={loadDashboard}
-            disabled={loading || syncing}
-            title="Reload API data"
-            aria-label="Reload API data"
+            onClick={checkDatabase}
+            title="GET /database"
           >
-            <RefreshCcw aria-hidden="true" />
+            <Database />
+            Check
           </button>
           <button
             className="primaryButton"
             type="button"
             onClick={refreshTransactions}
-            disabled={syncing}
+            title="POST /refresh"
           >
-            <PlugZap aria-hidden="true" />
-            <span>{syncing ? "Refreshing" : "POST /refresh"}</span>
+            <RefreshCcw />
+            Refresh
           </button>
         </div>
       </header>
 
-      <ErrorMessage error={error} />
+      {(notice || error) && (
+        <div className={error ? "message error" : "message success"} role="status">
+          {error ? <AlertCircle aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+          <span>{error || notice}</span>
+        </div>
+      )}
 
-      <section className="metricGrid" aria-label="API summary">
-        <Metric
-          label="Database"
-          value={statusLabel(health)}
-          detail="GET /database"
-          icon={health === "online" ? <CheckCircle2 /> : <Database />}
-        />
-        <Metric
-          label="Balances"
-          value={formatMoney(totalBalance)}
-          detail={`${balances.length} rows from GET /balance`}
-          icon={<Banknote />}
-        />
-        <Metric
-          label="Categories"
-          value={String(categories.length)}
-          detail={`${formatMoney(budgetTotal)} total budget`}
-          icon={<Database />}
-        />
-        <Metric
-          label="Last Loaded"
-          value={lastLoaded ? formatDateTime(lastLoaded) : "Pending"}
-          detail="Latest automatic route refresh"
-          icon={<Activity />}
-        />
+      <section className="statGrid" aria-label="Dashboard totals">
+        <Stat label="Balance total" value={formatMoney(balanceTotal)} icon={<Banknote />} />
+        <Stat label="Accounts loaded" value={String(balances.length)} icon={<WalletCards />} />
+        <Stat label="Categories" value={String(categories.length)} icon={<Pencil />} />
+        <Stat label="Transactions" value={String(transactions.length)} icon={<Activity />} />
       </section>
 
-      <section className="routeGrid" aria-label="Backend routes">
-        {routeLogList.map((route) => (
-          <RouteCard key={`${route.method}-${route.path}`} route={route} />
-        ))}
-      </section>
-
-      <section className="workspace">
-        <section className="panel">
-          <div className="panelHeader">
-            <div>
-              <p>GET /balance</p>
-              <h2>Account Balances</h2>
-            </div>
-            <label className="searchBox">
-              <Search aria-hidden="true" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search account or institution"
-              />
-            </label>
+      <section className="sectionBlock">
+        <div className="sectionHeader">
+          <div>
+            <p>Balances</p>
+            <h2>Accounts</h2>
           </div>
+          <button
+            className="secondaryButton"
+            type="button"
+            onClick={loadBalances}
+            title="GET /balance"
+          >
+            <WalletCards />
+            Load All
+          </button>
+        </div>
 
-          {loading ? (
-            <EmptyState
-              icon={<Activity />}
-              title="Loading balances"
-              detail="Waiting for the FastAPI balance route."
+        <div className="lookupBar">
+          <label>
+            <span>Account ID</span>
+            <input
+              inputMode="numeric"
+              value={accountId}
+              onChange={(event) => setAccountId(event.target.value)}
             />
-          ) : filteredBalances.length > 0 ? (
-            <div className="dataList">
-              {filteredBalances.map((balance) => (
-                <BalanceRow key={balance.id} balance={balance} />
-              ))}
+          </label>
+          <button
+            className="secondaryButton"
+            type="button"
+            onClick={loadBalance}
+            title="GET /balance/{account_id}"
+          >
+            <Search />
+            Lookup
+          </button>
+          {selectedBalance && (
+            <div className="selectedBalance">
+              <strong>{selectedBalance.account}</strong>
+              <span>{formatMoney(selectedBalance.balance)}</span>
             </div>
-          ) : (
-            <EmptyState
-              icon={<Banknote />}
-              title="No balances returned"
-              detail="The route returned an empty array."
-            />
           )}
-        </section>
+        </div>
 
-        <section className="panel">
-          <div className="panelHeader">
-            <div>
-              <p>GET /balance/{"{account_id}"}</p>
-              <h2>Single Account Lookup</h2>
-            </div>
+        {balances.length > 0 ? (
+          <div className="balanceList">
+            {balances.map((balance, index) => (
+              <article
+                className="balanceItem"
+                key={`${balance.account}-${balance.institution || "bank"}-${index}`}
+              >
+                <div>
+                  <strong>{balance.account}</strong>
+                  <span>{balance.institution || "Unknown institution"}</span>
+                </div>
+                <b>{formatMoney(balance.balance)}</b>
+              </article>
+            ))}
           </div>
-          <div className="lookupForm">
-            <label>
-              <span>account_id</span>
-              <input
-                inputMode="numeric"
-                value={accountId}
-                onChange={(event) => setAccountId(event.target.value)}
-                placeholder="1"
-              />
-            </label>
-            <button className="secondaryButton" type="button" onClick={lookupBalance}>
-              Call route
+        ) : (
+          <EmptyState icon={<WalletCards />} title="No balances loaded" />
+        )}
+      </section>
+
+      <section className="sectionBlock">
+        <div className="sectionHeader">
+          <div>
+            <p>Categories</p>
+            <h2>Budgets</h2>
+          </div>
+          <button
+            className="secondaryButton"
+            type="button"
+            onClick={loadCategories}
+            title="GET /categories"
+          >
+            <RefreshCcw />
+            Reload
+          </button>
+        </div>
+
+        <form className="categoryForm" onSubmit={createCategory}>
+          <label>
+            <span>Name</span>
+            <input
+              value={newCategory.category_name}
+              onChange={(event) =>
+                setNewCategory((current) => ({
+                  ...current,
+                  category_name: event.target.value
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>Budget</span>
+            <input
+              inputMode="decimal"
+              value={newCategory.budget}
+              onChange={(event) =>
+                setNewCategory((current) => ({
+                  ...current,
+                  budget: event.target.value
+                }))
+              }
+            />
+          </label>
+          <button className="primaryButton" type="submit" title="POST /categories">
+            <Save />
+            Create
+          </button>
+        </form>
+
+        {categories.length > 0 ? (
+          <div className="tableWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Budget</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map((category) => {
+                  const draft = categoryDrafts[category.category_id] ||
+                    categoryDraft(category);
+
+                  return (
+                    <tr key={category.category_id}>
+                      <td>{category.category_id}</td>
+                      <td>
+                        <input
+                          value={draft.category_name}
+                          onChange={(event) =>
+                            setCategoryDrafts((current) => ({
+                              ...current,
+                              [category.category_id]: {
+                                ...draft,
+                                category_name: event.target.value
+                              }
+                            }))
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          inputMode="decimal"
+                          value={draft.budget}
+                          onChange={(event) =>
+                            setCategoryDrafts((current) => ({
+                              ...current,
+                              [category.category_id]: {
+                                ...draft,
+                                budget: event.target.value
+                              }
+                            }))
+                          }
+                        />
+                      </td>
+                      <td>
+                        <div className="rowActions">
+                          <button
+                            className="iconButton success"
+                            type="button"
+                            onClick={() => updateCategory(category.category_id)}
+                            title="PUT /categories/{category_id}"
+                            aria-label={`Save category ${category.category_id}`}
+                          >
+                            <Save />
+                          </button>
+                          <button
+                            className="iconButton danger"
+                            type="button"
+                            onClick={() => deleteCategory(category.category_id)}
+                            title="DELETE /categories/{category_id}"
+                            aria-label={`Delete category ${category.category_id}`}
+                          >
+                            <Trash2 />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState icon={<Pencil />} title="No categories loaded" />
+        )}
+      </section>
+
+      <section className="sectionBlock">
+        <div className="sectionHeader">
+          <div>
+            <p>Transactions</p>
+            <h2>Recent Activity</h2>
+          </div>
+          <div className="sectionActions">
+            <button
+              className="secondaryButton"
+              type="button"
+              onClick={loadTransactions}
+              title="GET /transactions"
+            >
+              <Activity />
+              Load
+            </button>
+            <button
+              className="primaryButton"
+              type="button"
+              onClick={refreshTransactions}
+              title="POST /refresh"
+            >
+              <RefreshCcw />
+              Refresh
             </button>
           </div>
-          {singleBalance ? (
-            <div className="dataList singleResult">
-              <BalanceRow balance={singleBalance} />
-            </div>
-          ) : (
-            <EmptyState
-              icon={<Search />}
-              title="No account selected"
-              detail="Enter an account_id and call the single balance route."
-            />
-          )}
-        </section>
+        </div>
 
-        <section className="panel widePanel">
-          <div className="panelHeader">
-            <div>
-              <p>GET, PUT, DELETE /categories</p>
-              <h2>Categories</h2>
-            </div>
-          </div>
-          {categories.length > 0 ? (
-            <div className="dataList">
-              {categories.map((category) => (
-                <CategoryRow
-                  key={category.category_id}
-                  category={category}
-                  isEditing={editingCategoryId === category.category_id}
-                  draft={categoryDraft}
-                  saving={savingCategoryId === category.category_id}
-                  deleting={deletingCategoryId === category.category_id}
-                  onEdit={() => startCategoryEdit(category)}
-                  onDraftChange={setCategoryDraft}
-                  onCancel={cancelCategoryEdit}
-                  onSave={() => saveCategory(category.category_id)}
-                  onDelete={() => deleteCategory(category)}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              icon={<Database />}
-              title="No categories returned"
-              detail="The category list route returned an empty array."
-            />
-          )}
-        </section>
-
-        <section className="panel widePanel">
-          <div className="panelHeader">
-            <div>
-              <p>POST /refresh</p>
-              <h2>Refresh Transactions</h2>
-            </div>
-          </div>
-          {transactions.length > 0 ? (
-            <div className="transactionTable">
-              <div className="tableHead">
-                <span>Date</span>
-                <span>Merchant</span>
-                <span>Account</span>
-                <span>Amount</span>
-                <span>Raw</span>
-              </div>
-              {transactions.map((transaction) => (
-                <div className="tableRow" key={transaction.id}>
-                  <span>{transaction.date || "Unknown"}</span>
-                  <span>
-                    <strong>{transaction.merchant}</strong>
-                    <small>{transaction.description}</small>
-                  </span>
-                  <span>
-                    <strong>{transaction.accountName}</strong>
-                    <small>
-                      {transaction.accountId === null
-                        ? "account_id unavailable"
-                        : `account_id ${transaction.accountId}`}
-                    </small>
-                  </span>
-                  <span
-                    className={
-                      transaction.amount >= 0 ? "amountIn" : "amountOut"
-                    }
+        {recentTransactions.length > 0 ? (
+          <div className="tableWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Merchant</th>
+                  <th>Account</th>
+                  <th>Category</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentTransactions.map((transaction, index) => (
+                  <tr
+                    key={`${transaction.transaction_id || index}-${transaction.transaction_date}`}
                   >
-                    {formatMoney(transaction.amount)}
-                  </span>
-                  <details className="rowDetails">
-                    <summary>JSON</summary>
-                    <pre>{formatPayload(transaction.raw)}</pre>
-                  </details>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              icon={<PlugZap />}
-              title="No refresh response yet"
-              detail="Use POST /refresh to display returned transactions."
-            />
-          )}
-        </section>
+                    <td>{formatDate(transaction.transaction_date)}</td>
+                    <td>
+                      <strong>{transaction.merchant_name}</strong>
+                      {transaction.reference && <span>{transaction.reference}</span>}
+                    </td>
+                    <td>
+                      {transaction.account_name || `Account ${transaction.account_id}`}
+                    </td>
+                    <td>{transaction.category_name || transaction.category_id || "-"}</td>
+                    <td
+                      className={
+                        transaction.direction === "OUTBOUND"
+                          ? "amount outbound"
+                          : "amount inbound"
+                      }
+                    >
+                      {formatSignedTransaction(transaction)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState icon={<Activity />} title="No transactions loaded" />
+        )}
       </section>
+
+      <section className="sectionBlock">
+        <div className="sectionHeader">
+          <div>
+            <p>Routes</p>
+            <h2>API Activity</h2>
+          </div>
+        </div>
+
+        <div className="routeGrid">
+          {routeDefinitions.map((route) => {
+            const log = routeLogs[route.key];
+
+            return (
+              <article className="routeItem" key={route.key}>
+                <div className="routeTopline">
+                  <span className={`method ${route.method.toLowerCase()}`}>
+                    {route.method}
+                  </span>
+                  <span className={`routeState ${log.state}`}>
+                    {log.state === "error" ? <X /> : <CheckCircle2 />}
+                    {stateLabel(log.state)}
+                  </span>
+                </div>
+                <strong>{route.label}</strong>
+                <code>{route.path}</code>
+                <span>{log.status ? `HTTP ${log.status}` : log.detail}</span>
+                <small>{formatDateTime(log.updatedAt)}</small>
+                <details>
+                  <summary>Response</summary>
+                  <pre>{formatPayload(log.payload)}</pre>
+                </details>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <footer>
+        <PlugZap aria-hidden="true" />
+        <span>Proxy target: FASTAPI_BASE_URL</span>
+      </footer>
     </main>
   );
 }

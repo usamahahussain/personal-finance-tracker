@@ -1,23 +1,13 @@
 export type BalanceResponse = {
-  account?: string;
-  institution?: string | null;
-  balance?: number | string | null;
-  Account?: string;
-  Institution?: string | null;
-  Balance?: number | string | null;
-};
-
-export type AccountBalance = {
-  id: string;
   account: string;
-  institution: string;
-  amount: number;
+  institution?: string | null;
+  balance: number | string;
 };
 
 export type CategoryResponse = {
   category_id: number;
   category_name: string;
-  budget: number | string | null;
+  budget?: number | string | null;
 };
 
 export type CategoryUpdate = {
@@ -25,37 +15,60 @@ export type CategoryUpdate = {
   budget: number | null;
 };
 
-export type RawTransaction = {
-  lunchflow_transaction_id?: string;
-  account_id?: number;
+export type TransactionResponse = {
+  transaction_id?: number;
+  account_id: number;
   account_name?: string;
-  amount?: number | string;
-  date?: string;
-  merchant?: string;
-  description?: string;
-  full_json?: Record<string, unknown>;
+  amount: number | string;
+  transaction_date: string;
+  direction: "INBOUND" | "OUTBOUND" | string;
+  merchant_name: string;
+  category_id?: number | null;
+  category_name?: string | null;
+  reference?: string | null;
 };
 
-export type Transaction = {
-  id: string;
-  accountId: number | null;
-  accountName: string;
-  amount: number;
-  date: string;
-  merchant: string;
-  description: string;
-  raw: RawTransaction;
+export type RefreshResponse = {
+  received: number;
+  inserted: number;
+  skipped_existing: number;
 };
+
+export type ApiResult<T> = {
+  data: T;
+  status: number;
+};
+
+export class ApiError extends Error {
+  status: number;
+  payload: unknown;
+
+  constructor(message: string, status: number, payload: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
 
 const currency = process.env.NEXT_PUBLIC_CURRENCY || "GBP";
 
-export const moneyFormatter = new Intl.NumberFormat("en-GB", {
+const moneyFormatter = new Intl.NumberFormat("en-GB", {
   style: "currency",
   currency,
   maximumFractionDigits: 2
 });
 
-export function toAmount(value: number | string | null | undefined) {
+const dateFormatter = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "medium"
+});
+
+const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "medium",
+  timeStyle: "short"
+});
+
+export function toNumber(value: number | string | null | undefined) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
   }
@@ -69,60 +82,84 @@ export function toAmount(value: number | string | null | undefined) {
 }
 
 export function formatMoney(value: number | string | null | undefined) {
-  return moneyFormatter.format(toAmount(value));
+  return moneyFormatter.format(toNumber(value));
+}
+
+export function formatSignedTransaction(transaction: TransactionResponse) {
+  const amount = toNumber(transaction.amount);
+  const signedAmount = transaction.direction === "OUTBOUND" ? -amount : amount;
+  return formatMoney(signedAmount);
+}
+
+export function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
 }
 
 export function formatDateTime(value: Date | null) {
-  if (!value) {
-    return "Not run";
+  return value ? dateTimeFormatter.format(value) : "Not run";
+}
+
+export function formatPayload(payload: unknown) {
+  if (payload === null || typeof payload === "undefined") {
+    return "No response body";
   }
 
-  return new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(value);
+  if (typeof payload === "string") {
+    return payload;
+  }
+
+  return JSON.stringify(payload, null, 2);
 }
 
-export function normaliseBalance(
-  raw: BalanceResponse,
-  index: number
-): AccountBalance {
-  const account = raw.account ?? raw.Account;
-  const institution = raw.institution ?? raw.Institution;
-  const balance = raw.balance ?? raw.Balance;
-  const label = account?.trim() || `Account ${index + 1}`;
-  const provider = institution?.trim() || "Unknown";
+export async function apiRequest<T>(
+  path: string,
+  init?: RequestInit
+): Promise<ApiResult<T>> {
+  const endpoint = path.startsWith("/api/backend")
+    ? path
+    : path.startsWith("/")
+      ? `/api/backend${path}`
+      : `/api/backend/${path}`;
+
+  const response = await fetch(endpoint, {
+    ...init,
+    cache: "no-store",
+    headers: {
+      accept: "application/json",
+      ...(init?.body ? { "content-type": "application/json" } : {}),
+      ...(init?.headers ?? {})
+    }
+  });
+
+  const text = await response.text();
+  let payload: unknown = null;
+
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = text;
+    }
+  }
+
+  if (!response.ok) {
+    const detail =
+      typeof payload === "object" && payload && "detail" in payload
+        ? String((payload as { detail?: unknown }).detail)
+        : typeof payload === "object" && payload && "error" in payload
+          ? String((payload as { error?: unknown }).error)
+          : `Request failed with status ${response.status}`;
+
+    throw new ApiError(detail, response.status, payload);
+  }
 
   return {
-    id: `${label}-${provider}-${index}`,
-    account: label,
-    institution: provider,
-    amount: toAmount(balance)
+    data: payload as T,
+    status: response.status
   };
-}
-
-export function normaliseTransaction(
-  raw: RawTransaction,
-  index: number
-): Transaction {
-  return {
-    id: raw.lunchflow_transaction_id || `transaction-${index}`,
-    accountId: typeof raw.account_id === "number" ? raw.account_id : null,
-    accountName: raw.account_name?.trim() || "Unknown account",
-    amount: toAmount(raw.amount),
-    date: raw.date || "",
-    merchant: raw.merchant?.trim() || "Unknown merchant",
-    description: raw.description?.trim() || "No description",
-    raw
-  };
-}
-
-export function sortByName<T extends { category_name: string }>(items: T[]) {
-  return [...items].sort((a, b) =>
-    a.category_name.localeCompare(b.category_name)
-  );
-}
-
-export function sortBalances(items: AccountBalance[]) {
-  return [...items].sort((a, b) => a.account.localeCompare(b.account));
 }
