@@ -42,6 +42,7 @@ def get_transactions(db: Session) -> Optional[list[Transactions]]:
             Transactions.transaction_id,
             Transactions.account_id,
             Accounts.account_name,
+            Accounts.institution_name,
             Transactions.amount,
             Transactions.transaction_date,
             Transactions.direction,

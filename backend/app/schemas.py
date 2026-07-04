@@ -23,10 +23,11 @@ class BalanceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 class TransactionResponse(BaseModel):
-    account_id: int
+    account_name: str
+    institution_name: str
     amount: float
     transaction_date: datetime
     direction: str
     merchant_name: str
-    category_id: Optional[int] = None
+    category_name: Optional[str] = None
     reference: Optional[str] = None
