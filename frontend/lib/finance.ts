@@ -16,14 +16,12 @@ export type CategoryUpdate = {
 };
 
 export type TransactionResponse = {
-  transaction_id?: number;
-  account_id: number;
-  account_name?: string;
+  account_name: string;
+  institution_name?: string | null;
   amount: number | string;
   transaction_date: string;
   direction: "INBOUND" | "OUTBOUND" | string;
   merchant_name: string;
-  category_id?: number | null;
   category_name?: string | null;
   reference?: string | null;
 };
@@ -87,8 +85,14 @@ export function formatMoney(value: number | string | null | undefined) {
 
 export function formatSignedTransaction(transaction: TransactionResponse) {
   const amount = toNumber(transaction.amount);
-  const signedAmount = transaction.direction === "OUTBOUND" ? -amount : amount;
+  const signedAmount =
+    transaction.direction.toUpperCase() === "OUTBOUND" ? -amount : amount;
   return formatMoney(signedAmount);
+}
+
+export function signedTransactionAmount(transaction: TransactionResponse) {
+  const amount = toNumber(transaction.amount);
+  return transaction.direction.toUpperCase() === "OUTBOUND" ? -amount : amount;
 }
 
 export function formatDate(value: string | null | undefined) {
@@ -114,6 +118,18 @@ export function formatPayload(payload: unknown) {
   }
 
   return JSON.stringify(payload, null, 2);
+}
+
+export function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    return `${error.status}: ${error.message}`;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
 }
 
 export async function apiRequest<T>(

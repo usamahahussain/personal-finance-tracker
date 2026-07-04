@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Personal Finance Tracker",
-  description: "Dashboard for the FastAPI personal finance backend"
+  description: "Frontend for the FastAPI personal finance backend"
 };
 
 export default function RootLayout({
@@ -13,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AppShell>{children}</AppShell>
+      </body>
     </html>
   );
 }

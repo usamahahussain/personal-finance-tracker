@@ -1,6 +1,6 @@
 # Frontend
 
-Next.js dashboard for the FastAPI personal finance backend.
+Next.js frontend for the FastAPI personal finance backend.
 
 ## Run locally
 
@@ -24,14 +24,20 @@ cd backend/app
 fastapi dev app.py
 ```
 
+## Pages
+
+- `/` and `/transactions`: full transaction table using every field returned by `GET /transactions`.
+- `/balances`: account balances from `GET /balance`.
+- `/categories`: category create, edit, and delete workflows.
+- `/api-status`: backend health checks and route response diagnostics.
+
 ## Surfaced backend data
 
 - `GET /database`: database connectivity status.
 - `GET /balance`: all account balances.
-- `GET /balance/{account_id}`: one account balance by account id.
-- `POST /refresh`: Lunchflow transaction payload.
+- `GET /transactions`: all transactions.
+- `POST /refresh`: Lunchflow transaction refresh.
 - `GET /categories`: category list.
+- `POST /categories`: create a category.
 - `PUT /categories/{category_id}`: update `category_name` and `budget`.
 - `DELETE /categories/{category_id}`: delete a category.
-
-The dashboard mirrors the routes currently exposed by `backend/app/app.py`. Category creation is not shown because the backend does not currently expose `POST /categories`.
