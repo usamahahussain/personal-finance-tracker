@@ -57,10 +57,6 @@ const moneyFormatter = new Intl.NumberFormat("en-GB", {
   maximumFractionDigits: 2
 });
 
-const dateFormatter = new Intl.DateTimeFormat("en-GB", {
-  dateStyle: "medium"
-});
-
 const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
   timeStyle: "short"
@@ -100,8 +96,7 @@ export function formatDate(value: string | null | undefined) {
     return "Unknown";
   }
 
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
+  return value.split("T")[0] || value;
 }
 
 export function formatDateTime(value: Date | null) {

@@ -173,7 +173,13 @@ export function TransactionsPage() {
 
                   return (
                     <tr
-                      key={`${transaction.transaction_date}-${transaction.merchant_name}-${transaction.reference || index}`}
+                      key={[
+                        transaction.transaction_date,
+                        transaction.account_name,
+                        transaction.merchant_name,
+                        transaction.reference || "",
+                        index
+                      ].join("|")}
                     >
                       <td>{formatDate(transaction.transaction_date)}</td>
                       <td>
