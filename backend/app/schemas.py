@@ -29,5 +29,10 @@ class TransactionResponse(BaseModel):
     transaction_date: datetime
     direction: str
     merchant_name: str
+    transaction_id: int
+    category_id: Optional[float]
     category_name: Optional[str] = None
     reference: Optional[str] = None
+
+class TransactionUpdate(BaseModel):
+    category_id: int

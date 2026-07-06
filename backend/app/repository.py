@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import text, select
+from sqlalchemy import text, select, update
 from sqlalchemy.orm import Session
 from models import Accounts, Categories, Transactions
 
@@ -35,6 +35,7 @@ def create_category(db: Session, category_name: str, category_budget: Optional[f
     db.flush()
     return category
 
+###### Transactions CRUD ######
 
 def get_transactions(db: Session) -> Optional[list[Transactions]]:
     stmt = (
@@ -59,6 +60,27 @@ def get_transactions(db: Session) -> Optional[list[Transactions]]:
         )
     )
     return db.execute(stmt).mappings().all()
+
+def get_transaction(db: Session, transaction_id: int):
+    stmt = (
+        select(
+            Transactions.transaction_id,
+            Transactions.account_id,
+            Accounts.account_name,
+            Accounts.institution_name,
+            Transactions.amount,
+            Transactions.transaction_date,
+            Transactions.direction,
+            Transactions.merchant_name,
+            Transactions.category_id,
+            Categories.category_name,
+            Transactions.reference
+        )
+        .join(Accounts, Accounts.account_id == Transactions.account_id)
+        .outerjoin(Categories, Categories.category_id == Transactions.category_id)
+        .where(Transactions.transaction_id == transaction_id)
+    )
+    return db.execute(stmt).mappings().first()
 
 def refresh_transactions(db:Session, raw_transactions: list):
     ## filter out transactions with lunchflow IDs that already exist in DB
@@ -101,3 +123,11 @@ def refresh_transactions(db:Session, raw_transactions: list):
         "inserted": len(new_transactions),
         "skipped_existing": len(raw_transactions) - len(new_transactions)
     }
+
+def update_transaction_category(db: Session, transaction_id: int, category_id: int):
+    stmt = select(Transactions).where(Transactions.transaction_id == transaction_id)
+    transaction_to_update = db.execute(stmt).scalar_one_or_none()
+    # transaction_to_update = db.query(Transactions).filter_by(transaction_id=transaction_id).first()
+    transaction_to_update.category_id = category_id
+    db.flush()
+    return get_transaction(db, transaction_id)

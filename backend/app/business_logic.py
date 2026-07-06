@@ -10,7 +10,8 @@ from repository import (
     delete_category as repo_delete_category,
     create_category as repo_create_category,
     get_transactions as repo_get_transactions,
-    refresh_transactions as repo_refresh_transactions
+    refresh_transactions as repo_refresh_transactions,
+    update_transaction_category as repo_update_transaction
 )
 from pydantic import BaseModel
 from datetime import datetime
@@ -115,6 +116,8 @@ def test_connection(db: Session) -> bool:
 def get_transactions(db: Session) -> Optional[list[Transactions]]:
     return repo_get_transactions(db)
 
+def update_transaction(db: Session, transaction_id: int, category_id: int) -> Transactions:
+    return repo_update_transaction(db, transaction_id, category_id)
 
 def refresh_transactions(db: Session):
     accounts = repo_get_accounts(db)

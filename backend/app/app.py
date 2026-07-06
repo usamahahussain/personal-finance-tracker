@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 import business_logic
 from business_logic import RawTransaction
 from db_connection import get_db_session
-from schemas import BalanceResponse, CategoryResponse, CategoryUpdate, TransactionResponse
+from schemas import BalanceResponse, CategoryResponse, CategoryUpdate, TransactionResponse, TransactionUpdate
 
 app = FastAPI()
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -80,3 +80,13 @@ def refresh_database(db: DbSession):
     result = business_logic.refresh_transactions(db)
     db.commit()
     return result
+
+@app.put("/transactions/{transaction_id}/category", response_model=TransactionResponse)
+def update_transaction(transaction_id: int, payload: TransactionUpdate, db: DbSession):
+    updated_transaction = business_logic.update_transaction(
+        db, 
+        transaction_id, 
+        payload.category_id
+    )
+    db.commit()
+    return updated_transaction
