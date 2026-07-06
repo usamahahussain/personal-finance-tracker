@@ -95,9 +95,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             {health === "online" ? <CheckCircle2 /> : <AlertCircle />}
             {healthLabel(health)}
           </span>
-          <button className="iconTextButton" type="button" onClick={checkDatabase} title="Check backend">
+          <button
+            className="iconTextButton"
+            type="button"
+            onClick={checkDatabase}
+            title="GET /database through FastAPI and update the Online/Offline badge."
+            aria-label="Check FastAPI database health"
+          >
             <RefreshCcw />
-            <span>Check</span>
+            <span>Check database</span>
           </button>
         </div>
       </header>

@@ -268,13 +268,27 @@ export function DashboardPage() {
               onChange={(event) => setSelectedMonth(event.target.value || getMonthValue())}
             />
           </label>
-          <button className="ghostButton" type="button" onClick={() => loadDashboardData(true)} disabled={loading}>
+          <button
+            className="ghostButton"
+            type="button"
+            onClick={() => loadDashboardData(true)}
+            disabled={loading}
+            title="GET /transactions, /categories, and /balance through FastAPI without importing new transactions."
+            aria-label="Reload dashboard data from FastAPI without importing new transactions"
+          >
             <ListChecks />
-            <span>Reload</span>
+            <span>Reload dashboard data</span>
           </button>
-          <button className="primaryButton" type="button" onClick={refreshTransactions} disabled={refreshing}>
+          <button
+            className="primaryButton"
+            type="button"
+            onClick={refreshTransactions}
+            disabled={refreshing}
+            title="POST /refresh to import Lunchflow transactions into the database, then reload dashboard data."
+            aria-label="Import Lunchflow transactions through FastAPI, then reload dashboard data"
+          >
             <RefreshCcw />
-            <span>{refreshing ? "Refreshing" : "Refresh"}</span>
+            <span>{refreshing ? "Importing transactions" : "Import transactions"}</span>
           </button>
         </div>
       </section>
