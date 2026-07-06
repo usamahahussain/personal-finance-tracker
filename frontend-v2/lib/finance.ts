@@ -2,6 +2,7 @@ export type BalanceResponse = {
   account: string;
   institution?: string | null;
   balance: number | string;
+  error?: boolean;
 };
 
 export type CategoryResponse = {

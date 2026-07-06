@@ -53,6 +53,10 @@ function sortTransactionsNewestFirst(transactions: TransactionResponse[]) {
   );
 }
 
+function countLabel(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 export function DashboardPage() {
   const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
@@ -159,8 +163,10 @@ export function DashboardPage() {
       (total, category) => total + toNumber(category.budget),
       0
     );
+    const failedBalanceCount = balances.filter((balance) => balance.error === true).length;
     const balanceTotal = balances.reduce(
-      (total, balance) => total + toNumber(balance.balance),
+      (total, balance) =>
+        balance.error === true ? total : total + toNumber(balance.balance),
       0
     );
     const uncategorized = monthlyTransactions.filter(
@@ -174,6 +180,7 @@ export function DashboardPage() {
       budget,
       remaining: budget - spend,
       balanceTotal,
+      failedBalanceCount,
       uncategorizedCount: uncategorized.length
     };
   }, [balances, categories, monthlyOutbound, monthlyTransactions]);
@@ -251,6 +258,10 @@ export function DashboardPage() {
 
   const monthLabel = formatMonthValue(selectedMonth);
   const remainingTone = summary.remaining < 0 ? "bad" : summary.remaining < summary.budget * 0.2 ? "warn" : "good";
+  const balanceDetail =
+    summary.failedBalanceCount > 0
+      ? `${countLabel(balances.length, "account")}, ${summary.failedBalanceCount} unavailable`
+      : countLabel(balances.length, "account");
 
   return (
     <>
@@ -313,7 +324,7 @@ export function DashboardPage() {
         <MetricTile
           label="Balances"
           value={formatMoney(summary.balanceTotal)}
-          detail={`${balances.length} accounts`}
+          detail={balanceDetail}
           tone="good"
           icon={<WalletCards />}
         />
@@ -389,17 +400,34 @@ export function DashboardPage() {
             <LoadingBlock label="Loading balances" />
           ) : balances.length > 0 ? (
             <div className="balanceList">
-              {balances.map((balance, index) => (
-                <div className="balanceRow" key={`${balance.account}-${balance.institution || "unknown"}-${index}`}>
-                  <div>
-                    <strong>{balance.account}</strong>
-                    <span>{balance.institution || "Unknown institution"}</span>
+              {balances.map((balance, index) => {
+                const balanceUnavailable = balance.error === true;
+
+                return (
+                  <div
+                    className={balanceUnavailable ? "balanceRow balanceRowWarning" : "balanceRow"}
+                    key={`${balance.account}-${balance.institution || "unknown"}-${index}`}
+                  >
+                    <div>
+                      <strong>{balance.account}</strong>
+                      <span>{balance.institution || "Unknown institution"}</span>
+                      {balanceUnavailable ? (
+                        <span className="balanceFailureHint" title="Getting the balance for this account was unsuccessful.">
+                          <AlertTriangle aria-hidden="true" />
+                          Balance unavailable
+                        </span>
+                      ) : null}
+                    </div>
+                    {balanceUnavailable ? (
+                      <strong className="balanceUnavailableAmount">Unavailable</strong>
+                    ) : (
+                      <strong className={toNumber(balance.balance) < 0 ? "amount negative" : "amount positive"}>
+                        {formatMoney(balance.balance)}
+                      </strong>
+                    )}
                   </div>
-                  <strong className={toNumber(balance.balance) < 0 ? "amount negative" : "amount positive"}>
-                    {formatMoney(balance.balance)}
-                  </strong>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <EmptyBlock icon={<WalletCards aria-hidden="true" />} title="No balances loaded" />

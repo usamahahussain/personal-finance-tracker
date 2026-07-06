@@ -481,6 +481,30 @@ td strong {
   padding: 11px 14px;
 }
 
+.balanceRowWarning {
+  background: rgba(242, 184, 75, 0.04);
+}
+
+.balanceFailureHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  color: var(--amber);
+}
+
+.balanceFailureHint svg {
+  width: 14px;
+  height: 14px;
+}
+
+.balanceUnavailableAmount {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
 .actionPanel {
   margin-bottom: 4px;
 }
