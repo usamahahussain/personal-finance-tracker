@@ -17,7 +17,15 @@ def get_account(db: Session, account_id: int) -> Optional[Accounts]:
 ###### Categories CRUD ######
 
 def get_categories(db: Session) -> list[Categories]:
-    return db.query(Categories).all()
+    stmt = (
+        select(
+            Categories.category_id,
+            Categories.category_name,
+            Categories.budget
+        )
+        .order_by(Categories.category_name.desc())
+    )
+    return db.execute(stmt).mappings().all()
 
 def get_category(db: Session, category_id: int) -> Optional[Categories]:
     return db.query(Categories).filter_by(category_id=category_id).first()
