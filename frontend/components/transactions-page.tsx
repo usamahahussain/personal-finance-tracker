@@ -2,6 +2,9 @@
 
 import {
   Activity,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Building2,
   Calendar,
   CircleDollarSign,
   RefreshCcw,
@@ -19,7 +22,7 @@ import {
   formatMoney,
   formatSignedTransaction,
   getErrorMessage,
-  signedTransactionAmount
+  toNumber
 } from "@/lib/finance";
 import {
   DirectionBadge,
@@ -34,6 +37,8 @@ const monthFormatter = new Intl.DateTimeFormat("en-GB", {
   month: "long",
   year: "numeric"
 });
+
+const ALL_ACCOUNTS_VALUE = "all";
 
 function getMonthValue(date = new Date()) {
   const year = date.getFullYear();
@@ -63,10 +68,24 @@ function formatMonthValue(value: string) {
   return monthFormatter.format(new Date(year, month - 1, 1));
 }
 
+function getInstitutionLabel(transaction: TransactionResponse) {
+  return transaction.institution_name || "Unknown institution";
+}
+
+function getCategoryLabel(transaction: TransactionResponse) {
+  return transaction.category_name || "Uncategorized";
+}
+
+function getAccountFilterKey(transaction: TransactionResponse) {
+  return `${getInstitutionLabel(transaction)}::${transaction.account_name}`;
+}
+
 export function TransactionsPage() {
   const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
   const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedAccountKey, setSelectedAccountKey] =
+    useState(ALL_ACCOUNTS_VALUE);
   const [loading, setLoading] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -127,7 +146,7 @@ export function TransactionsPage() {
     setSelectedMonth(getMonthValue());
   }, []);
 
-  const filteredTransactions = useMemo(
+  const monthlyTransactions = useMemo(
     () =>
       selectedMonth
         ? transactions.filter(
@@ -139,29 +158,196 @@ export function TransactionsPage() {
     [selectedMonth, transactions]
   );
 
-  const summary = useMemo(() => {
-    const total = filteredTransactions.reduce(
-      (sum, transaction) => sum + signedTransactionAmount(transaction),
-      0
+  const accountOptions = useMemo(() => {
+    const options = new Map<
+      string,
+      {
+        key: string;
+        accountName: string;
+        institutionName: string;
+      }
+    >();
+
+    monthlyTransactions.forEach((transaction) => {
+      const key = getAccountFilterKey(transaction);
+      if (options.has(key)) {
+        return;
+      }
+
+      options.set(key, {
+        key,
+        accountName: transaction.account_name,
+        institutionName: getInstitutionLabel(transaction)
+      });
+    });
+
+    return [...options.values()].sort(
+      (a, b) =>
+        a.accountName.localeCompare(b.accountName) ||
+        a.institutionName.localeCompare(b.institutionName)
     );
+  }, [monthlyTransactions]);
+
+  useEffect(() => {
+    if (
+      selectedAccountKey !== ALL_ACCOUNTS_VALUE &&
+      !accountOptions.some((option) => option.key === selectedAccountKey)
+    ) {
+      setSelectedAccountKey(ALL_ACCOUNTS_VALUE);
+    }
+  }, [accountOptions, selectedAccountKey]);
+
+  const filteredTransactions = useMemo(
+    () =>
+      selectedAccountKey === ALL_ACCOUNTS_VALUE
+        ? monthlyTransactions
+        : monthlyTransactions.filter(
+            (transaction) =>
+              getAccountFilterKey(transaction) === selectedAccountKey
+          ),
+    [monthlyTransactions, selectedAccountKey]
+  );
+
+  const summary = useMemo(() => {
+    let incoming = 0;
+    let outgoing = 0;
+
+    filteredTransactions.forEach((transaction) => {
+      const amount = toNumber(transaction.amount);
+
+      if (transaction.direction.toUpperCase() === "OUTBOUND") {
+        outgoing += amount;
+      } else {
+        incoming += amount;
+      }
+    });
+
     const uncategorized = filteredTransactions.filter(
       (transaction) => !transaction.category_name
     ).length;
     const accounts = new Set(
-      filteredTransactions.map((transaction) => transaction.account_name)
+      filteredTransactions.map((transaction) => getAccountFilterKey(transaction))
+    ).size;
+    const institutions = new Set(
+      filteredTransactions.map((transaction) => getInstitutionLabel(transaction))
     ).size;
 
     return {
-      total,
+      incoming,
+      outgoing,
+      net: incoming - outgoing,
       uncategorized,
-      accounts
+      accounts,
+      institutions
     };
+  }, [filteredTransactions]);
+
+  const categorySpend = useMemo(() => {
+    const spendByCategory = new Map<
+      string,
+      {
+        categoryName: string;
+        transactionCount: number;
+        total: number;
+      }
+    >();
+
+    filteredTransactions.forEach((transaction) => {
+      if (transaction.direction.toUpperCase() !== "OUTBOUND") {
+        return;
+      }
+
+      const categoryName = getCategoryLabel(transaction);
+      const current = spendByCategory.get(categoryName);
+
+      if (current) {
+        current.transactionCount += 1;
+        current.total += toNumber(transaction.amount);
+        return;
+      }
+
+      spendByCategory.set(categoryName, {
+        categoryName,
+        transactionCount: 1,
+        total: toNumber(transaction.amount)
+      });
+    });
+
+    return [...spendByCategory.values()].sort(
+      (a, b) => b.total - a.total || a.categoryName.localeCompare(b.categoryName)
+    );
+  }, [filteredTransactions]);
+
+  const maxCategorySpend = categorySpend[0]?.total ?? 0;
+
+  const institutionBreakdown = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        institutionName: string;
+        transactionCount: number;
+        accountNames: Set<string>;
+        incoming: number;
+        outgoing: number;
+      }
+    >();
+
+    filteredTransactions.forEach((transaction) => {
+      const institutionName = getInstitutionLabel(transaction);
+      const current =
+        groups.get(institutionName) ??
+        {
+          institutionName,
+          transactionCount: 0,
+          accountNames: new Set<string>(),
+          incoming: 0,
+          outgoing: 0
+        };
+
+      current.transactionCount += 1;
+      current.accountNames.add(transaction.account_name);
+
+      if (transaction.direction.toUpperCase() === "OUTBOUND") {
+        current.outgoing += toNumber(transaction.amount);
+      } else {
+        current.incoming += toNumber(transaction.amount);
+      }
+
+      groups.set(institutionName, current);
+    });
+
+    return [...groups.values()]
+      .map((group) => ({
+        ...group,
+        accountCount: group.accountNames.size,
+        net: group.incoming - group.outgoing
+      }))
+      .sort(
+        (a, b) =>
+          b.outgoing - a.outgoing ||
+          Math.abs(b.net) - Math.abs(a.net) ||
+          a.institutionName.localeCompare(b.institutionName)
+      );
   }, [filteredTransactions]);
 
   const selectedMonthLabel = useMemo(
     () => (selectedMonth ? formatMonthValue(selectedMonth) : "Current month"),
     [selectedMonth]
   );
+
+  const selectedAccountLabel = useMemo(() => {
+    if (selectedAccountKey === ALL_ACCOUNTS_VALUE) {
+      return "all accounts";
+    }
+
+    const account = accountOptions.find(
+      (option) => option.key === selectedAccountKey
+    );
+
+    return account
+      ? `${account.accountName} at ${account.institutionName}`
+      : "selected account";
+  }, [accountOptions, selectedAccountKey]);
 
   async function refreshTransactions() {
     setRefreshing(true);
@@ -285,8 +471,18 @@ export function TransactionsPage() {
           icon={<Activity />}
         />
         <Stat
-          label="Signed total"
-          value={formatMoney(summary.total)}
+          label="Money out"
+          value={formatMoney(summary.outgoing)}
+          icon={<ArrowUpRight />}
+        />
+        <Stat
+          label="Money in"
+          value={formatMoney(summary.incoming)}
+          icon={<ArrowDownLeft />}
+        />
+        <Stat
+          label="Net total"
+          value={formatMoney(summary.net)}
           icon={<CircleDollarSign />}
         />
         <Stat
@@ -313,6 +509,21 @@ export function TransactionsPage() {
               }
             />
           </label>
+          <label>
+            <span>Account</span>
+            <select
+              value={selectedAccountKey}
+              onChange={(event) => setSelectedAccountKey(event.target.value)}
+              disabled={accountOptions.length === 0}
+            >
+              <option value={ALL_ACCOUNTS_VALUE}>All accounts</option>
+              {accountOptions.map((account) => (
+                <option key={account.key} value={account.key}>
+                  {account.accountName} ({account.institutionName})
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="secondaryButton compact"
             type="button"
@@ -324,8 +535,129 @@ export function TransactionsPage() {
           </button>
           <span className="filterSummary">
             {selectedMonthLabel}: {filteredTransactions.length} of{" "}
-            {transactions.length}
+            {monthlyTransactions.length} monthly transactions for{" "}
+            {selectedAccountLabel}
           </span>
+        </div>
+
+        <div
+          className="insightGrid"
+          aria-label="Filtered transaction breakdowns"
+        >
+          <section className="breakdownPanel" aria-label="Category spend">
+            <div className="panelHeader">
+              <div>
+                <p>Category spend</p>
+                <h2>{selectedMonthLabel}</h2>
+              </div>
+              <strong>{formatMoney(summary.outgoing)}</strong>
+            </div>
+
+            {categorySpend.length > 0 ? (
+              <div className="breakdownList">
+                {categorySpend.map((category) => {
+                  const percentOfSpend =
+                    summary.outgoing > 0
+                      ? Math.round((category.total / summary.outgoing) * 100)
+                      : 0;
+                  const barWidth =
+                    maxCategorySpend > 0
+                      ? `${Math.max((category.total / maxCategorySpend) * 100, 3)}%`
+                      : "0%";
+
+                  return (
+                    <div
+                      className="breakdownRow categoryRow"
+                      key={category.categoryName}
+                    >
+                      <div>
+                        <strong>{category.categoryName}</strong>
+                        <span>
+                          {category.transactionCount}{" "}
+                          {category.transactionCount === 1
+                            ? "transaction"
+                            : "transactions"}
+                        </span>
+                      </div>
+                      <div className="breakdownAmount">
+                        <strong>{formatMoney(category.total)}</strong>
+                        <span>{percentOfSpend}%</span>
+                      </div>
+                      <div className="spendBar" aria-hidden="true">
+                        <span style={{ width: barWidth }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="panelEmpty">
+                <Tags aria-hidden="true" />
+                <span>No outbound category spend in this filter.</span>
+              </div>
+            )}
+          </section>
+
+          <section className="breakdownPanel" aria-label="Institution totals">
+            <div className="panelHeader">
+              <div>
+                <p>Institution totals</p>
+                <h2>{summary.institutions} institutions</h2>
+              </div>
+              <Building2 aria-hidden="true" />
+            </div>
+
+            {institutionBreakdown.length > 0 ? (
+              <div className="institutionList">
+                {institutionBreakdown.map((institution) => {
+                  const netClass =
+                    institution.net < 0 ? "amount outbound" : "amount inbound";
+
+                  return (
+                    <div
+                      className="institutionRow"
+                      key={institution.institutionName}
+                    >
+                      <div className="institutionName">
+                        <strong>{institution.institutionName}</strong>
+                        <span>
+                          {institution.accountCount}{" "}
+                          {institution.accountCount === 1
+                            ? "account"
+                            : "accounts"}{" "}
+                          / {institution.transactionCount}{" "}
+                          {institution.transactionCount === 1
+                            ? "transaction"
+                            : "transactions"}
+                        </span>
+                      </div>
+                      <dl className="metricList">
+                        <div>
+                          <dt>Spent</dt>
+                          <dd>{formatMoney(institution.outgoing)}</dd>
+                        </div>
+                        <div>
+                          <dt>In</dt>
+                          <dd>{formatMoney(institution.incoming)}</dd>
+                        </div>
+                        <div>
+                          <dt>Net</dt>
+                          <dd className={netClass}>
+                            {formatMoney(institution.net)}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="panelEmpty">
+                <Building2 aria-hidden="true" />
+                <span>No institution activity in this filter.</span>
+              </div>
+            )}
+          </section>
         </div>
 
         {loading && transactions.length === 0 ? (
@@ -408,7 +740,7 @@ export function TransactionsPage() {
           <EmptyState
             icon={<Calendar />}
             title={`No transactions in ${selectedMonthLabel}`}
-            detail="Choose another month or refresh transactions."
+            detail="Choose another month, change the account filter, or refresh transactions."
           />
         ) : (
           <EmptyState

@@ -201,23 +201,26 @@ export function CategoriesPage() {
     }
   }
 
-  async function deleteCategory(categoryId: number) {
+  async function deleteCategory(category: CategoryResponse) {
     setError(null);
     setNotice(null);
 
     try {
-      await apiRequest<null>(`/categories/${categoryId}`, {
+      await apiRequest<null>(`/categories/${category.category_id}`, {
         method: "DELETE"
       });
       setCategories((current) =>
-        current.filter((category) => category.category_id !== categoryId)
+        current.filter(
+          (currentCategory) =>
+            currentCategory.category_id !== category.category_id
+        )
       );
       setCategoryDrafts((current) => {
         const next = { ...current };
-        delete next[categoryId];
+        delete next[category.category_id];
         return next;
       });
-      setNotice(`Deleted category ${categoryId}.`);
+      setNotice(`Deleted ${category.category_name}.`);
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     }
@@ -298,7 +301,6 @@ export function CategoriesPage() {
             <table>
               <thead>
                 <tr>
-                  <th>ID</th>
                   <th>Name</th>
                   <th>Budget</th>
                   <th>Actions</th>
@@ -311,7 +313,6 @@ export function CategoriesPage() {
 
                   return (
                     <tr key={category.category_id}>
-                      <td>{category.category_id}</td>
                       <td>
                         <input
                           value={draft.category_name}
@@ -355,9 +356,9 @@ export function CategoriesPage() {
                           <button
                             className="iconButton danger"
                             type="button"
-                            onClick={() => deleteCategory(category.category_id)}
+                            onClick={() => deleteCategory(category)}
                             title="DELETE /categories/{category_id}"
-                            aria-label={`Delete category ${category.category_id}`}
+                            aria-label={`Delete ${category.category_name}`}
                           >
                             <Trash2 />
                           </button>
