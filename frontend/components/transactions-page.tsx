@@ -1,6 +1,13 @@
 "use client";
 
-import { Activity, CircleDollarSign, RefreshCcw, Tags, WalletCards } from "lucide-react";
+import {
+  Activity,
+  Calendar,
+  CircleDollarSign,
+  RefreshCcw,
+  Tags,
+  WalletCards
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RefreshResponse,
@@ -21,8 +28,42 @@ import {
   StatusMessage
 } from "@/components/ui";
 
+const monthFormatter = new Intl.DateTimeFormat("en-GB", {
+  month: "long",
+  year: "numeric"
+});
+
+function getMonthValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function getTransactionMonthValue(value: string) {
+  const datePart = value.split("T")[0];
+  const match = /^(\d{4})-(\d{2})/.exec(datePart);
+
+  if (match) {
+    return `${match[1]}-${match[2]}`;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : getMonthValue(date);
+}
+
+function formatMonthValue(value: string) {
+  const [year, month] = value.split("-").map(Number);
+
+  if (!year || !month) {
+    return "Selected month";
+  }
+
+  return monthFormatter.format(new Date(year, month - 1, 1));
+}
+
 export function TransactionsPage() {
   const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -50,16 +91,32 @@ export function TransactionsPage() {
     void loadTransactions();
   }, [loadTransactions]);
 
+  useEffect(() => {
+    setSelectedMonth(getMonthValue());
+  }, []);
+
+  const filteredTransactions = useMemo(
+    () =>
+      selectedMonth
+        ? transactions.filter(
+            (transaction) =>
+              getTransactionMonthValue(transaction.transaction_date) ===
+              selectedMonth
+          )
+        : [],
+    [selectedMonth, transactions]
+  );
+
   const summary = useMemo(() => {
-    const total = transactions.reduce(
+    const total = filteredTransactions.reduce(
       (sum, transaction) => sum + signedTransactionAmount(transaction),
       0
     );
-    const uncategorized = transactions.filter(
+    const uncategorized = filteredTransactions.filter(
       (transaction) => !transaction.category_name
     ).length;
     const accounts = new Set(
-      transactions.map((transaction) => transaction.account_name)
+      filteredTransactions.map((transaction) => transaction.account_name)
     ).size;
 
     return {
@@ -67,7 +124,12 @@ export function TransactionsPage() {
       uncategorized,
       accounts
     };
-  }, [transactions]);
+  }, [filteredTransactions]);
+
+  const selectedMonthLabel = useMemo(
+    () => (selectedMonth ? formatMonthValue(selectedMonth) : "Current month"),
+    [selectedMonth]
+  );
 
   async function refreshTransactions() {
     setRefreshing(true);
@@ -126,7 +188,7 @@ export function TransactionsPage() {
       <section className="statGrid" aria-label="Transaction totals">
         <Stat
           label="Transactions"
-          value={String(transactions.length)}
+          value={String(filteredTransactions.length)}
           icon={<Activity />}
         />
         <Stat
@@ -147,9 +209,35 @@ export function TransactionsPage() {
       </section>
 
       <section className="sectionBlock">
+        <div className="filterBar" aria-label="Transaction filters">
+          <label>
+            <span>Calendar month</span>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(event) =>
+                setSelectedMonth(event.target.value || getMonthValue())
+              }
+            />
+          </label>
+          <button
+            className="secondaryButton compact"
+            type="button"
+            onClick={() => setSelectedMonth(getMonthValue())}
+            title="Show current calendar month"
+          >
+            <Calendar />
+            Current month
+          </button>
+          <span className="filterSummary">
+            {selectedMonthLabel}: {filteredTransactions.length} of{" "}
+            {transactions.length}
+          </span>
+        </div>
+
         {loading && transactions.length === 0 ? (
           <LoadingState title="Loading transactions" />
-        ) : transactions.length > 0 ? (
+        ) : transactions.length > 0 && filteredTransactions.length > 0 ? (
           <div className="tableWrap">
             <table className="transactionsTable">
               <thead>
@@ -165,7 +253,7 @@ export function TransactionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((transaction, index) => {
+                {filteredTransactions.map((transaction, index) => {
                   const amountClass =
                     transaction.direction.toUpperCase() === "OUTBOUND"
                       ? "amount outbound"
@@ -201,6 +289,12 @@ export function TransactionsPage() {
               </tbody>
             </table>
           </div>
+        ) : transactions.length > 0 ? (
+          <EmptyState
+            icon={<Calendar />}
+            title={`No transactions in ${selectedMonthLabel}`}
+            detail="Choose another month or refresh transactions."
+          />
         ) : (
           <EmptyState
             icon={<Activity />}

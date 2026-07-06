@@ -326,6 +326,36 @@ label span {
   padding: 0 0 24px;
 }
 
+.filterBar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.filterBar label {
+  width: min(240px, 100%);
+}
+
+.filterBar input {
+  min-width: 180px;
+}
+
+.filterSummary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
 .categoryForm {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) auto;
@@ -640,9 +670,15 @@ footer {
   .pageNav a,
   .topbarActions,
   .pageActions,
+  .filterBar label,
+  .filterSummary,
   .primaryButton,
   .secondaryButton {
     width: 100%;
+  }
+
+  .filterSummary {
+    margin-left: 0;
   }
 
   .primaryButton,
