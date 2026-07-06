@@ -19,6 +19,7 @@ class BalanceResponse(BaseModel):
     account: str
     institution: Optional[str] = None
     balance: float
+    error: bool
 
     model_config = {"from_attributes": True}
 

@@ -50,29 +50,51 @@ def get_account_balance(db: Session, account_id: int):
     account = repo_get_single_account(db, account_id)
     if account is None:
         raise ValueError(f"Account {account_id} was not found")
-
-    response = query_lunchflow("/"+str(account.lunchflow_account_id)+"/balance")
-    balance = {
-        "account": account.account_name,
-        "institution": account.institution_name,
-        "balance": response["balance"]["amount"]
-    }
+    try:
+        response = query_lunchflow("/"+str(account.lunchflow_account_id)+"/balance")
+        balance = {
+            "account": account.account_name,
+            "institution": account.institution_name,
+            "balance": response["balance"]["amount"],
+            "error": False
+        }
+    except Exception as e:
+        print("Error getting balance for account: ",account.lunchflow_account_id,", name: ",account.account_name)
+        balance = {
+            "account": account.account_name,
+            "institution": account.institution_name,
+            "balance": 0,
+            "error": True
+        }
     return balance
 
 def get_all_account_balances(db: Session):
     accounts = repo_get_accounts(db)
     balances = []
     for account in accounts:
+        try:
+            response = query_lunchflow("/"+str(account.lunchflow_account_id)+"/balance")
+            print("Response:")
+            print(response)
 
-        response = query_lunchflow("/"+str(account.lunchflow_account_id)+"/balance")
-
-        balances.append(
-            {
-                "account": account.account_name,
-                "institution": account.institution_name,
-                "balance": response["balance"]["amount"]
-            }
-        )
+            balances.append(
+                {
+                    "account": account.account_name,
+                    "institution": account.institution_name,
+                    "balance": response["balance"]["amount"],
+                    "error": False
+                }
+            )
+        except Exception as e:
+            print("Error getting balance for account: ",account.lunchflow_account_id,", name: ",account.account_name)
+            balances.append(
+                {
+                    "account": account.account_name,
+                    "institution": account.institution_name,
+                    "balance": 0,
+                    "error": True
+                }
+            )
     return balances
 
 
