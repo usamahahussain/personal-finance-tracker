@@ -75,19 +75,3 @@ export function EmptyBlock({
     </div>
   );
 }
-
-export function Meter({
-  value,
-  tone
-}: {
-  value: number;
-  tone: "good" | "warn" | "bad" | "neutral";
-}) {
-  const width = `${Math.min(Math.max(value, 0), 100)}%`;
-
-  return (
-    <div className={`meter ${tone}`} aria-hidden="true">
-      <span style={{ width }} />
-    </div>
-  );
-}

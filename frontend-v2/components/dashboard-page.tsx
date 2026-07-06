@@ -32,15 +32,13 @@ import {
   isOutbound,
   toNumber
 } from "@/lib/finance";
-import { EmptyBlock, LoadingBlock, Meter, MetricTile, StatusMessage } from "@/components/ui";
+import { EmptyBlock, LoadingBlock, MetricTile, StatusMessage } from "@/components/ui";
 
 type BudgetRow = {
   key: string;
-  categoryId: number | null;
   name: string;
   budget: number;
   spend: number;
-  transactionCount: number;
   remaining: number;
 };
 
@@ -53,22 +51,6 @@ function sortTransactionsNewestFirst(transactions: TransactionResponse[]) {
     (a, b) =>
       new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime()
   );
-}
-
-function budgetTone(row: BudgetRow): "good" | "warn" | "bad" | "neutral" {
-  if (row.budget === 0 && row.spend > 0) {
-    return "warn";
-  }
-
-  if (row.remaining < 0) {
-    return "bad";
-  }
-
-  if (row.budget > 0 && row.spend / row.budget >= 0.8) {
-    return "warn";
-  }
-
-  return row.budget > 0 ? "good" : "neutral";
 }
 
 export function DashboardPage() {
@@ -131,11 +113,9 @@ export function DashboardPage() {
     categories.forEach((category) => {
       rows.set(String(category.category_id), {
         key: String(category.category_id),
-        categoryId: category.category_id,
         name: category.category_name,
         budget: toNumber(category.budget),
         spend: 0,
-        transactionCount: 0,
         remaining: toNumber(category.budget)
       });
     });
@@ -146,16 +126,13 @@ export function DashboardPage() {
         rows.get(key) ??
         {
           key,
-          categoryId: transaction.category_id ?? null,
           name: getCategoryName(transaction, categories),
           budget: 0,
           spend: 0,
-          transactionCount: 0,
           remaining: 0
         };
 
       current.spend += toNumber(transaction.amount);
-      current.transactionCount += 1;
       current.remaining = current.budget - current.spend;
       rows.set(key, current);
     });
@@ -350,27 +327,31 @@ export function DashboardPage() {
           {loading && budgetRows.length === 0 ? (
             <LoadingBlock label="Loading monthly spend" />
           ) : budgetRows.length > 0 ? (
-            <div className="budgetList">
-              {budgetRows.map((row) => {
-                const tone = budgetTone(row);
-                const percent = row.budget > 0 ? (row.spend / row.budget) * 100 : row.spend > 0 ? 100 : 0;
-
-                return (
-                  <div className="budgetRow" key={row.key}>
-                    <div className="budgetName">
-                      <strong>{row.name}</strong>
-                      <span>
-                        {row.transactionCount} {row.transactionCount === 1 ? "transaction" : "transactions"}
-                      </span>
-                    </div>
-                    <div className="budgetNumbers">
-                      <strong>{formatMoney(row.spend)}</strong>
-                      <span>{row.budget > 0 ? `${formatMoney(row.remaining)} left` : "No budget"}</span>
-                    </div>
-                    <Meter value={percent} tone={tone} />
-                  </div>
-                );
-              })}
+            <div className="tableWrap compactTableWrap">
+              <table className="dataTable budgetTable">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Spend to date</th>
+                    <th>Budget</th>
+                    <th>Outstanding</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {budgetRows.map((row) => (
+                    <tr key={row.key}>
+                      <td>
+                        <strong>{row.name}</strong>
+                      </td>
+                      <td className="amount negative">{formatMoney(row.spend)}</td>
+                      <td>{formatMoney(row.budget)}</td>
+                      <td className={row.remaining < 0 ? "amount negative" : "amount positive"}>
+                        {formatMoney(row.remaining)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : (
             <EmptyBlock

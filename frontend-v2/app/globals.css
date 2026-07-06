@@ -442,34 +442,21 @@ select:focus {
   color: var(--coral);
 }
 
-.budgetList,
 .balanceList,
 .actionList {
   display: grid;
 }
 
-.budgetRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, auto);
-  gap: 8px 14px;
-  border-top: 1px solid var(--line-soft);
-  padding: 12px 14px;
-}
-
-.budgetRow:first-child,
 .balanceRow:first-child,
 .actionRow:first-child {
   border-top: 0;
 }
 
-.budgetName,
-.budgetNumbers,
 .balanceRow > div,
 .actionRow > div {
   min-width: 0;
 }
 
-.budgetName strong,
 .balanceRow strong,
 .actionRow strong,
 td strong {
@@ -477,8 +464,6 @@ td strong {
   overflow-wrap: anywhere;
 }
 
-.budgetName span,
-.budgetNumbers span,
 .balanceRow span,
 .actionRow span,
 .emptyBlock span {
@@ -487,40 +472,6 @@ td strong {
   color: var(--muted);
   font-size: 0.8rem;
   line-height: 1.35;
-}
-
-.budgetNumbers {
-  text-align: right;
-}
-
-.meter {
-  grid-column: 1 / -1;
-  height: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #0d0f0d;
-}
-
-.meter span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-}
-
-.meter.good span {
-  background: var(--mint);
-}
-
-.meter.warn span {
-  background: var(--amber);
-}
-
-.meter.bad span {
-  background: var(--coral);
-}
-
-.meter.neutral span {
-  background: var(--blue);
 }
 
 .balanceRow {
@@ -594,6 +545,15 @@ td strong {
   width: 100%;
   min-width: 760px;
   border-collapse: collapse;
+}
+
+.compactTableWrap .dataTable {
+  min-width: 540px;
+}
+
+.budgetTable th:not(:first-child),
+.budgetTable td:not(:first-child) {
+  text-align: right;
 }
 
 .transactionTable {
@@ -764,14 +724,6 @@ td {
   .metricGrid.compactMetrics,
   .categoryCreateForm {
     grid-template-columns: 1fr;
-  }
-
-  .budgetRow {
-    grid-template-columns: 1fr;
-  }
-
-  .budgetNumbers {
-    text-align: left;
   }
 
   .panelHeader {
