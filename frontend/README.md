@@ -36,6 +36,7 @@ fastapi dev app.py
 - `GET /database`: database connectivity status.
 - `GET /balance`: all account balances.
 - `GET /transactions`: all transactions.
+- `PUT /transactions/{transaction_id}/category`: update a transaction category.
 - `POST /refresh`: Lunchflow transaction refresh.
 - `GET /categories`: category list.
 - `POST /categories`: create a category.

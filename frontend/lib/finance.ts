@@ -16,14 +16,20 @@ export type CategoryUpdate = {
 };
 
 export type TransactionResponse = {
+  transaction_id: number;
   account_name: string;
   institution_name?: string | null;
   amount: number | string;
   transaction_date: string;
   direction: "INBOUND" | "OUTBOUND" | string;
   merchant_name: string;
+  category_id?: number | null;
   category_name?: string | null;
   reference?: string | null;
+};
+
+export type TransactionCategoryUpdate = {
+  category_id: number | null;
 };
 
 export type RefreshResponse = {
