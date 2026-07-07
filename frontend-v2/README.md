@@ -26,6 +26,7 @@ fastapi dev app.py
 
 ## Pages
 
-- `/`: monthly dashboard for spend against budgets, balances, and uncategorized transactions.
+- `/`: monthly dashboard for spend against budgets and uncategorized transactions.
 - `/transactions`: detailed transaction review with filters and category assignment.
+- `/balances`: account balances from `GET /balance`.
 - `/categories`: category and monthly budget CRUD.

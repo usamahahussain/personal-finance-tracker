@@ -9,7 +9,8 @@ import {
   LayoutDashboard,
   ReceiptText,
   RefreshCcw,
-  Tags
+  Tags,
+  WalletCards
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
@@ -27,6 +28,11 @@ const navItems = [
     href: "/transactions",
     label: "Transactions",
     icon: ReceiptText
+  },
+  {
+    href: "/balances",
+    label: "Balances",
+    icon: WalletCards
   },
   {
     href: "/categories",

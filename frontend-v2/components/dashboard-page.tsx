@@ -3,18 +3,15 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowDownLeft,
   ArrowUpRight,
   CalendarDays,
   CircleDollarSign,
   ListChecks,
   RefreshCcw,
-  Tags,
-  WalletCards
+  Tags
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BalanceResponse,
   CategoryResponse,
   RefreshResponse,
   TransactionCategoryUpdate,
@@ -53,14 +50,9 @@ function sortTransactionsNewestFirst(transactions: TransactionResponse[]) {
   );
 }
 
-function countLabel(count: number, singular: string, plural = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
 export function DashboardPage() {
   const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
-  const [balances, setBalances] = useState<BalanceResponse[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(getMonthValue());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,15 +65,13 @@ export function DashboardPage() {
     setError(null);
 
     try {
-      const [transactionResult, categoryResult, balanceResult] = await Promise.all([
+      const [transactionResult, categoryResult] = await Promise.all([
         apiRequest<TransactionResponse[]>("/transactions"),
-        apiRequest<CategoryResponse[]>("/categories"),
-        apiRequest<BalanceResponse[]>("/balance")
+        apiRequest<CategoryResponse[]>("/categories")
       ]);
 
       setTransactions(transactionResult.data);
       setCategories(sortCategories(categoryResult.data));
-      setBalances(balanceResult.data);
 
       if (showNotice) {
         setNotice("Dashboard reloaded.");
@@ -163,12 +153,6 @@ export function DashboardPage() {
       (total, category) => total + toNumber(category.budget),
       0
     );
-    const failedBalanceCount = balances.filter((balance) => balance.error === true).length;
-    const balanceTotal = balances.reduce(
-      (total, balance) =>
-        balance.error === true ? total : total + toNumber(balance.balance),
-      0
-    );
     const uncategorized = monthlyTransactions.filter(
       (transaction) => !transaction.category_id
     );
@@ -179,11 +163,9 @@ export function DashboardPage() {
       net: income - spend,
       budget,
       remaining: budget - spend,
-      balanceTotal,
-      failedBalanceCount,
       uncategorizedCount: uncategorized.length
     };
-  }, [balances, categories, monthlyOutbound, monthlyTransactions]);
+  }, [categories, monthlyOutbound, monthlyTransactions]);
 
   const uncategorizedTransactions = useMemo(
     () =>
@@ -258,10 +240,6 @@ export function DashboardPage() {
 
   const monthLabel = formatMonthValue(selectedMonth);
   const remainingTone = summary.remaining < 0 ? "bad" : summary.remaining < summary.budget * 0.2 ? "warn" : "good";
-  const balanceDetail =
-    summary.failedBalanceCount > 0
-      ? `${countLabel(balances.length, "account")}, ${summary.failedBalanceCount} unavailable`
-      : countLabel(balances.length, "account");
 
   return (
     <>
@@ -284,8 +262,8 @@ export function DashboardPage() {
             type="button"
             onClick={() => loadDashboardData(true)}
             disabled={loading}
-            title="GET /transactions, /categories, and /balance through FastAPI without importing new transactions."
-            aria-label="Reload dashboard data from FastAPI without importing new transactions"
+            title="GET /transactions and /categories through FastAPI without importing new transactions."
+            aria-label="Reload dashboard transactions and categories from FastAPI without importing new transactions"
           >
             <ListChecks />
             <span>Reload dashboard data</span>
@@ -295,8 +273,8 @@ export function DashboardPage() {
             type="button"
             onClick={refreshTransactions}
             disabled={refreshing}
-            title="POST /refresh to import Lunchflow transactions into the database, then reload dashboard data."
-            aria-label="Import Lunchflow transactions through FastAPI, then reload dashboard data"
+            title="POST /refresh to import Lunchflow transactions into the database, then reload dashboard transactions and categories."
+            aria-label="Import Lunchflow transactions through FastAPI, then reload dashboard transactions and categories"
           >
             <RefreshCcw />
             <span>{refreshing ? "Importing transactions" : "Import transactions"}</span>
@@ -306,7 +284,7 @@ export function DashboardPage() {
 
       <StatusMessage error={error} notice={notice} />
 
-      <section className="metricGrid" aria-label="Monthly summary">
+      <section className="metricGrid dashboardMetrics" aria-label="Monthly summary">
         <MetricTile
           label="Spent"
           value={formatMoney(summary.spend)}
@@ -320,13 +298,6 @@ export function DashboardPage() {
           detail={`${formatMoney(summary.budget)} monthly budget`}
           tone={remainingTone}
           icon={<CircleDollarSign />}
-        />
-        <MetricTile
-          label="Balances"
-          value={formatMoney(summary.balanceTotal)}
-          detail={balanceDetail}
-          tone="good"
-          icon={<WalletCards />}
         />
         <MetricTile
           label="Needs category"
@@ -384,53 +355,6 @@ export function DashboardPage() {
               title="No spend for this month"
               detail="Refresh or choose another month."
             />
-          )}
-        </section>
-
-        <section className="panel">
-          <div className="panelHeader">
-            <div>
-              <p className="eyebrow">Current</p>
-              <h2>Balances</h2>
-            </div>
-            <strong>{formatMoney(summary.balanceTotal)}</strong>
-          </div>
-
-          {loading && balances.length === 0 ? (
-            <LoadingBlock label="Loading balances" />
-          ) : balances.length > 0 ? (
-            <div className="balanceList">
-              {balances.map((balance, index) => {
-                const balanceUnavailable = balance.error === true;
-
-                return (
-                  <div
-                    className={balanceUnavailable ? "balanceRow balanceRowWarning" : "balanceRow"}
-                    key={`${balance.account}-${balance.institution || "unknown"}-${index}`}
-                  >
-                    <div>
-                      <strong>{balance.account}</strong>
-                      <span>{balance.institution || "Unknown institution"}</span>
-                      {balanceUnavailable ? (
-                        <span className="balanceFailureHint" title="Getting the balance for this account was unsuccessful.">
-                          <AlertTriangle aria-hidden="true" />
-                          Balance unavailable
-                        </span>
-                      ) : null}
-                    </div>
-                    {balanceUnavailable ? (
-                      <strong className="balanceUnavailableAmount">Unavailable</strong>
-                    ) : (
-                      <strong className={toNumber(balance.balance) < 0 ? "amount negative" : "amount positive"}>
-                        {formatMoney(balance.balance)}
-                      </strong>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyBlock icon={<WalletCards aria-hidden="true" />} title="No balances loaded" />
           )}
         </section>
       </section>
