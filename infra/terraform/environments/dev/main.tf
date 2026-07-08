@@ -12,7 +12,7 @@ module "network" {
   existing_public_route_table_id = var.existing_public_route_table_id
   app_subnet_cidr                = var.app_subnet_cidr
   db_subnet_cidr                 = var.db_subnet_cidr
-  admin_allowed_cidr             = var.admin_allowed_cidr
+  admin_allowed_cidrs            = var.admin_allowed_cidrs
 }
 
 module "compute" {
@@ -25,6 +25,7 @@ module "compute" {
   nsg_ids             = [module.network.app_nsg_id]
   ssh_public_key      = var.ssh_public_key
   cloud_init          = file("${path.module}/cloud-init-docker.yaml")
+  image_id            = var.compute_image_id
   shape               = var.compute_shape
   ocpus               = var.compute_ocpus
   memory_in_gbs       = var.compute_memory_gb

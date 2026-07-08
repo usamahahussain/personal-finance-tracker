@@ -28,6 +28,11 @@ variable "cloud_init" {
   default     = null
 }
 
+variable "image_id" {
+  type        = string
+  description = "Pinned OCI image OCID to use for the boot volume. Changing this replaces the boot volume."
+}
+
 variable "shape" {
   type    = string
   default = "VM.Standard.E4.Flex"

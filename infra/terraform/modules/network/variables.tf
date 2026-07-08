@@ -28,7 +28,12 @@ variable "db_subnet_cidr" {
   type = string
 }
 
-variable "admin_allowed_cidr" {
-  type        = string
-  description = "Public CIDR allowed to reach SSH and the frontend/backend ports on the app VM."
+variable "admin_allowed_cidrs" {
+  type        = list(string)
+  description = "Public CIDR blocks allowed to reach SSH, HTTP, and HTTPS on the app VM."
+
+  validation {
+    condition     = length(var.admin_allowed_cidrs) > 0 && alltrue([for cidr in var.admin_allowed_cidrs : can(cidrnetmask(cidr))])
+    error_message = "admin_allowed_cidrs must contain at least one valid CIDR block."
+  }
 }
