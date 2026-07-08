@@ -57,6 +57,13 @@ write_files:
 
       echo "ADB wallet installed in /opt/oracle/wallet"
 
+  - path: /usr/sbin/install-adb-wallet
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      exec /usr/local/sbin/install-adb-wallet "$@"
+
   - path: /usr/local/bin/pft-sqlplus
     owner: root:root
     permissions: "0755"
