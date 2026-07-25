@@ -7,12 +7,14 @@ import {
   CalendarDays,
   CircleDollarSign,
   ListChecks,
+  Repeat2,
   RefreshCcw,
   Tags
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CategoryResponse,
+  RecurringTransactionResponse,
   RefreshResponse,
   TransactionCategoryUpdate,
   TransactionResponse,
@@ -26,6 +28,7 @@ import {
   getMonthValue,
   getTransactionMonthValue,
   getErrorMessage,
+  isRecurringCategory,
   isOutbound,
   toNumber
 } from "@/lib/finance";
@@ -39,8 +42,26 @@ type BudgetRow = {
   remaining: number;
 };
 
+type RecurringBudgetRow = {
+  key: string;
+  name: string;
+  expected: number;
+  actual: number;
+  variance: number;
+  active: boolean;
+  dueDay?: number | null;
+};
+
 function sortCategories(categories: CategoryResponse[]) {
   return [...categories].sort((a, b) => a.category_name.localeCompare(b.category_name));
+}
+
+function sortRecurringTransactions(series: RecurringTransactionResponse[]) {
+  return [...series].sort(
+    (a, b) =>
+      Number(b.active) - Number(a.active) ||
+      a.display_name.localeCompare(b.display_name)
+  );
 }
 
 function sortTransactionsNewestFirst(transactions: TransactionResponse[]) {
@@ -53,6 +74,7 @@ function sortTransactionsNewestFirst(transactions: TransactionResponse[]) {
 export function DashboardPage() {
   const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransactionResponse[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(getMonthValue());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -65,13 +87,15 @@ export function DashboardPage() {
     setError(null);
 
     try {
-      const [transactionResult, categoryResult] = await Promise.all([
+      const [transactionResult, categoryResult, recurringResult] = await Promise.all([
         apiRequest<TransactionResponse[]>("/transactions"),
-        apiRequest<CategoryResponse[]>("/categories")
+        apiRequest<CategoryResponse[]>("/categories"),
+        apiRequest<RecurringTransactionResponse[]>("/recurring-transactions")
       ]);
 
       setTransactions(transactionResult.data);
       setCategories(sortCategories(categoryResult.data));
+      setRecurringTransactions(sortRecurringTransactions(recurringResult.data));
 
       if (showNotice) {
         setNotice("Dashboard reloaded.");
@@ -101,20 +125,78 @@ export function DashboardPage() {
     [monthlyTransactions]
   );
 
-  const budgetRows = useMemo(() => {
-    const rows = new Map<string, BudgetRow>();
+  const recurringActualTransactions = useMemo(
+    () =>
+      monthlyOutbound.filter((transaction) => transaction.recurring_transaction_id),
+    [monthlyOutbound]
+  );
 
-    categories.forEach((category) => {
-      rows.set(String(category.category_id), {
-        key: String(category.category_id),
-        name: category.category_name,
-        budget: toNumber(category.budget),
-        spend: 0,
-        remaining: toNumber(category.budget)
+  const discretionaryTransactions = useMemo(
+    () =>
+      monthlyOutbound.filter((transaction) => !transaction.recurring_transaction_id),
+    [monthlyOutbound]
+  );
+
+  const recurringRows = useMemo(() => {
+    const rows = new Map<string, RecurringBudgetRow>();
+
+    recurringTransactions
+      .filter((item) => item.active)
+      .forEach((item) => {
+        rows.set(String(item.recurring_transaction_id), {
+          key: String(item.recurring_transaction_id),
+          name: item.display_name,
+          expected: toNumber(item.expected_amount),
+          actual: 0,
+          variance: toNumber(item.expected_amount),
+          active: true,
+          dueDay: item.due_day
+        });
       });
+
+    recurringActualTransactions.forEach((transaction) => {
+      const key = String(transaction.recurring_transaction_id);
+      const current =
+        rows.get(key) ??
+        {
+          key,
+          name: transaction.recurring_transaction_name || transaction.merchant_name,
+          expected: 0,
+          actual: 0,
+          variance: 0,
+          active: false,
+          dueDay: null
+        };
+
+      current.actual += toNumber(transaction.amount);
+      current.variance = current.expected - current.actual;
+      rows.set(key, current);
     });
 
-    monthlyOutbound.forEach((transaction) => {
+    return [...rows.values()].sort(
+      (a, b) =>
+        Number(a.actual === 0) - Number(b.actual === 0) ||
+        b.actual - a.actual ||
+        a.name.localeCompare(b.name)
+    );
+  }, [recurringActualTransactions, recurringTransactions]);
+
+  const discretionaryRows = useMemo(() => {
+    const rows = new Map<string, BudgetRow>();
+
+    categories
+      .filter((category) => !isRecurringCategory(category))
+      .forEach((category) => {
+        rows.set(String(category.category_id), {
+          key: String(category.category_id),
+          name: category.category_name,
+          budget: toNumber(category.budget),
+          spend: 0,
+          remaining: toNumber(category.budget)
+        });
+      });
+
+    discretionaryTransactions.forEach((transaction) => {
       const key = transaction.category_id ? String(transaction.category_id) : "uncategorized";
       const current =
         rows.get(key) ??
@@ -139,33 +221,71 @@ export function DashboardPage() {
           b.spend - a.spend ||
           a.name.localeCompare(b.name)
       );
-  }, [categories, monthlyOutbound]);
+  }, [categories, discretionaryTransactions]);
 
   const summary = useMemo(() => {
     const spend = monthlyOutbound.reduce(
       (total, transaction) => total + toNumber(transaction.amount),
       0
     );
+    const recurringExpected = recurringTransactions
+      .filter((item) => item.active)
+      .reduce((total, item) => total + toNumber(item.expected_amount), 0);
+    const recurringActual = recurringActualTransactions.reduce(
+      (total, transaction) => total + toNumber(transaction.amount),
+      0
+    );
+    const discretionaryBudget = categories
+      .filter((category) => !isRecurringCategory(category))
+      .reduce((total, category) => total + toNumber(category.budget), 0);
+    const discretionarySpend = discretionaryTransactions.reduce(
+      (total, transaction) => total + toNumber(transaction.amount),
+      0
+    );
     const income = monthlyTransactions
       .filter((transaction) => !isOutbound(transaction))
       .reduce((total, transaction) => total + toNumber(transaction.amount), 0);
-    const budget = categories.reduce(
-      (total, category) => total + toNumber(category.budget),
-      0
-    );
     const uncategorized = monthlyTransactions.filter(
       (transaction) => !transaction.category_id
+    );
+    const recurringCategoryIds = new Set(
+      categories
+        .filter(isRecurringCategory)
+        .map((category) => category.category_id)
+    );
+    const needsRecurringLink = monthlyOutbound.filter(
+      (transaction) =>
+        !transaction.recurring_transaction_id &&
+        transaction.category_id &&
+        recurringCategoryIds.has(transaction.category_id)
+    );
+    const missingRecurring = recurringRows.filter(
+      (row) => row.active && row.actual === 0
     );
 
     return {
       spend,
       income,
       net: income - spend,
-      budget,
-      remaining: budget - spend,
+      recurringExpected,
+      recurringActual,
+      recurringRemaining: recurringExpected - recurringActual,
+      discretionaryBudget,
+      discretionarySpend,
+      discretionaryRemaining: discretionaryBudget - discretionarySpend,
+      missingRecurringCount: missingRecurring.length,
+      needsRecurringLinkCount: needsRecurringLink.length,
       uncategorizedCount: uncategorized.length
     };
-  }, [categories, monthlyOutbound, monthlyTransactions]);
+  }, [
+    categories,
+    discretionaryTransactions,
+    monthlyOutbound,
+    monthlyTransactions,
+    recurringActualTransactions,
+    recurringRows,
+    recurringTransactions
+  ]);
 
   const uncategorizedTransactions = useMemo(
     () =>
@@ -239,7 +359,20 @@ export function DashboardPage() {
   }
 
   const monthLabel = formatMonthValue(selectedMonth);
-  const remainingTone = summary.remaining < 0 ? "bad" : summary.remaining < summary.budget * 0.2 ? "warn" : "good";
+  const recurringTone =
+    summary.recurringRemaining < 0
+      ? "bad"
+      : summary.recurringRemaining > 0 ||
+          summary.missingRecurringCount > 0
+        ? "warn"
+        : "good";
+  const discretionaryRemainingTone =
+    summary.discretionaryRemaining < 0
+      ? "bad"
+      : summary.discretionaryBudget > 0 &&
+          summary.discretionaryRemaining < summary.discretionaryBudget * 0.2
+        ? "warn"
+        : "good";
 
   return (
     <>
@@ -286,18 +419,25 @@ export function DashboardPage() {
 
       <section className="metricGrid dashboardMetrics" aria-label="Monthly summary">
         <MetricTile
-          label="Spent"
-          value={formatMoney(summary.spend)}
-          detail={`${monthlyOutbound.length} outbound transactions`}
-          tone="neutral"
-          icon={<ArrowUpRight />}
+          label="Recurring actual"
+          value={formatMoney(summary.recurringActual)}
+          detail={`${formatMoney(summary.recurringExpected)} expected`}
+          tone={recurringTone}
+          icon={<Repeat2 />}
         />
         <MetricTile
-          label="Budget left"
-          value={formatMoney(summary.remaining)}
-          detail={`${formatMoney(summary.budget)} monthly budget`}
-          tone={remainingTone}
+          label="Discretionary left"
+          value={formatMoney(summary.discretionaryRemaining)}
+          detail={`${formatMoney(summary.discretionarySpend)} spent`}
+          tone={discretionaryRemainingTone}
           icon={<CircleDollarSign />}
+        />
+        <MetricTile
+          label="Needs link"
+          value={String(summary.needsRecurringLinkCount)}
+          detail="recurring-category transactions"
+          tone={summary.needsRecurringLinkCount > 0 ? "warn" : "good"}
+          icon={<ArrowUpRight />}
         />
         <MetricTile
           label="Needs category"
@@ -309,32 +449,83 @@ export function DashboardPage() {
       </section>
 
       <section className="dashboardGrid">
-        <section className="panel widePanel">
+        <section className="panel">
           <div className="panelHeader">
             <div>
-              <p className="eyebrow">Budget pace</p>
-              <h2>Category spend</h2>
+              <p className="eyebrow">Recurring commitments</p>
+              <h2>Expected versus matched</h2>
             </div>
-            <strong className={summary.net < 0 ? "amount negative" : "amount positive"}>
-              {formatMoney(summary.net)}
+            <strong className={summary.recurringRemaining < 0 ? "amount negative" : "amount positive"}>
+              {formatMoney(summary.recurringRemaining)}
             </strong>
           </div>
 
-          {loading && budgetRows.length === 0 ? (
-            <LoadingBlock label="Loading monthly spend" />
-          ) : budgetRows.length > 0 ? (
+          {loading && recurringRows.length === 0 ? (
+            <LoadingBlock label="Loading recurring commitments" />
+          ) : recurringRows.length > 0 ? (
+            <div className="tableWrap compactTableWrap">
+              <table className="dataTable budgetTable">
+                <thead>
+                  <tr>
+                    <th>Series</th>
+                    <th>Actual</th>
+                    <th>Expected</th>
+                    <th>Difference</th>
+                    <th>Due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recurringRows.map((row) => (
+                    <tr key={row.key}>
+                      <td>
+                        <strong>{row.name}</strong>
+                      </td>
+                      <td className="amount negative">{formatMoney(row.actual)}</td>
+                      <td>{formatMoney(row.expected)}</td>
+                      <td className={row.variance < 0 ? "amount negative" : "amount positive"}>
+                        {formatMoney(row.variance)}
+                      </td>
+                      <td>{row.dueDay ? `Day ${row.dueDay}` : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyBlock
+              icon={<CalendarDays aria-hidden="true" />}
+              title="No recurring commitments"
+              detail="Create recurring series, then link imported transactions."
+            />
+          )}
+        </section>
+
+        <section className="panel">
+          <div className="panelHeader">
+            <div>
+              <p className="eyebrow">Discretionary spend</p>
+              <h2>Flexible category budget</h2>
+            </div>
+            <strong className={summary.discretionaryRemaining < 0 ? "amount negative" : "amount positive"}>
+              {formatMoney(summary.discretionaryRemaining)}
+            </strong>
+          </div>
+
+          {loading && discretionaryRows.length === 0 ? (
+            <LoadingBlock label="Loading discretionary spend" />
+          ) : discretionaryRows.length > 0 ? (
             <div className="tableWrap compactTableWrap">
               <table className="dataTable budgetTable">
                 <thead>
                   <tr>
                     <th>Category</th>
-                    <th>Spend to date</th>
+                    <th>Spend</th>
                     <th>Budget</th>
-                    <th>Outstanding</th>
+                    <th>Left</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {budgetRows.map((row) => (
+                  {discretionaryRows.map((row) => (
                     <tr key={row.key}>
                       <td>
                         <strong>{row.name}</strong>
@@ -352,8 +543,8 @@ export function DashboardPage() {
           ) : (
             <EmptyBlock
               icon={<CalendarDays aria-hidden="true" />}
-              title="No spend for this month"
-              detail="Refresh or choose another month."
+              title="No discretionary spend"
+              detail="Unlinked outbound transactions appear here."
             />
           )}
         </section>

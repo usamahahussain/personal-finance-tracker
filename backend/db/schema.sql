@@ -16,12 +16,32 @@ CREATE TABLE categories (
     category_id             NUMBER(19,0) GENERATED ALWAYS AS IDENTITY,
     category_name           VARCHAR2(100) NOT NULL,
     budget                  NUMBER(19,4),
+    budget_kind             VARCHAR2(20) DEFAULT 'DISCRETIONARY' NOT NULL,
     CONSTRAINT pk_categories PRIMARY KEY (category_id),
     CONSTRAINT uq_categories_category_name UNIQUE (category_name),
     CONSTRAINT ck_categories_budget
-        CHECK (budget IS NULL OR budget >= 0)
+        CHECK (budget IS NULL OR budget >= 0),
+    CONSTRAINT ck_categories_budget_kind
+        CHECK (budget_kind IN ('DISCRETIONARY', 'RECURRING'))
 );
 
+CREATE TABLE recurring_transactions (
+    recurring_transaction_id    NUMBER(19,0) GENERATED ALWAYS AS IDENTITY,
+    display_name                VARCHAR2(100) NOT NULL,
+    category_id                 NUMBER(19,0),
+    expected_amount             NUMBER(19,4),
+    due_day                     NUMBER(2,0),
+    active                      NUMBER(1,0) DEFAULT 1 NOT NULL,
+    CONSTRAINT pk_recurring_transactions PRIMARY KEY (recurring_transaction_id),
+    CONSTRAINT fk_recurring_transactions_category
+        FOREIGN KEY (category_id) REFERENCES categories(category_id),
+    CONSTRAINT ck_recurring_transactions_expected_amount
+        CHECK (expected_amount IS NULL OR expected_amount >= 0),
+    CONSTRAINT ck_recurring_transactions_due_day
+        CHECK (due_day IS NULL OR due_day BETWEEN 1 AND 31),
+    CONSTRAINT ck_recurring_transactions_active
+        CHECK (active IN (0, 1))
+);
 
 CREATE TABLE transactions (
     transaction_id              NUMBER(19,0) GENERATED ALWAYS AS IDENTITY,
@@ -32,6 +52,7 @@ CREATE TABLE transactions (
     direction                   VARCHAR2(10) NOT NULL,
     merchant_name               VARCHAR2(100) NOT NULL,
     category_id                 NUMBER(19,0),
+    recurring_transaction_id    NUMBER(19,0),
     reference                   VARCHAR2(255),
     raw_lunchflow_transaction   JSON,
     CONSTRAINT pk_transactions PRIMARY KEY (transaction_id),
@@ -40,7 +61,9 @@ CREATE TABLE transactions (
         FOREIGN KEY (account_id) REFERENCES accounts(account_id),
     CONSTRAINT fk_transactions_category
         FOREIGN KEY (category_id) REFERENCES categories(category_id),
-    -- CONSTRAINT fk_transactions_recurring_obligation
+    CONSTRAINT fk_transactions_recurring_transaction
+        FOREIGN KEY (recurring_transaction_id)
+        REFERENCES recurring_transactions(recurring_transaction_id),
     CONSTRAINT ck_transactions_direction
         CHECK (direction IN ('INBOUND', 'OUTBOUND'))
 );

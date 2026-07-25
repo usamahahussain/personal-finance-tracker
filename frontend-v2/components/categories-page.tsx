@@ -3,11 +3,14 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, RefreshCcw, Save, Tags, Trash2 } from "lucide-react";
 import {
+  BudgetKind,
   CategoryResponse,
   CategoryUpdate,
   apiRequest,
+  formatBudgetKind,
   formatMoney,
   getErrorMessage,
+  isRecurringCategory,
   toNumber
 } from "@/lib/finance";
 import { EmptyBlock, LoadingBlock, MetricTile, StatusMessage } from "@/components/ui";
@@ -15,6 +18,7 @@ import { EmptyBlock, LoadingBlock, MetricTile, StatusMessage } from "@/component
 type CategoryDraft = {
   category_name: string;
   budget: string;
+  budget_kind: BudgetKind;
 };
 
 function parseCategoryDraft(
@@ -33,7 +37,8 @@ function parseCategoryDraft(
       ok: true,
       payload: {
         category_name: categoryName,
-        budget: null
+        budget: null,
+        budget_kind: draft.budget_kind
       }
     };
   }
@@ -48,7 +53,8 @@ function parseCategoryDraft(
     ok: true,
     payload: {
       category_name: categoryName,
-      budget
+      budget,
+      budget_kind: draft.budget_kind
     }
   };
 }
@@ -59,7 +65,8 @@ function categoryDraft(category: CategoryResponse): CategoryDraft {
     budget:
       category.budget === null || typeof category.budget === "undefined"
         ? ""
-        : String(category.budget)
+        : String(category.budget),
+    budget_kind: isRecurringCategory(category) ? "RECURRING" : "DISCRETIONARY"
   };
 }
 
@@ -72,7 +79,8 @@ export function CategoriesPage() {
   const [categoryDrafts, setCategoryDrafts] = useState<Record<number, CategoryDraft>>({});
   const [newCategory, setNewCategory] = useState<CategoryDraft>({
     category_name: "",
-    budget: ""
+    budget: "",
+    budget_kind: "DISCRETIONARY"
   });
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
@@ -111,6 +119,16 @@ export function CategoriesPage() {
     [categories]
   );
 
+  const recurringBudgetTotal = useMemo(
+    () =>
+      categories
+        .filter(isRecurringCategory)
+        .reduce((total, category) => total + toNumber(category.budget), 0),
+    [categories]
+  );
+
+  const discretionaryBudgetTotal = budgetTotal - recurringBudgetTotal;
+
   async function createCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -131,7 +149,11 @@ export function CategoriesPage() {
       });
       const nextCategories = sortCategories([...categories, result.data]);
 
-      setNewCategory({ category_name: "", budget: "" });
+      setNewCategory({
+        category_name: "",
+        budget: "",
+        budget_kind: "DISCRETIONARY"
+      });
       setCategories(nextCategories);
       setCategoryDrafts(
         Object.fromEntries(
@@ -232,6 +254,8 @@ export function CategoriesPage() {
       <section className="metricGrid compactMetrics" aria-label="Category summary">
         <MetricTile label="Categories" value={String(categories.length)} icon={<Tags />} />
         <MetricTile label="Monthly budget" value={formatMoney(budgetTotal)} tone="good" icon={<Save />} />
+        <MetricTile label="Recurring" value={formatMoney(recurringBudgetTotal)} icon={<RefreshCcw />} />
+        <MetricTile label="Discretionary" value={formatMoney(discretionaryBudgetTotal)} icon={<Tags />} />
       </section>
 
       <section className="panel">
@@ -261,6 +285,21 @@ export function CategoriesPage() {
               }
             />
           </label>
+          <label>
+            <span>Budget type</span>
+            <select
+              value={newCategory.budget_kind}
+              onChange={(event) =>
+                setNewCategory((current) => ({
+                  ...current,
+                  budget_kind: event.target.value as BudgetKind
+                }))
+              }
+            >
+              <option value="DISCRETIONARY">Discretionary</option>
+              <option value="RECURRING">Recurring</option>
+            </select>
+          </label>
           <button className="primaryButton" type="submit">
             <Plus />
             <span>Create</span>
@@ -276,6 +315,7 @@ export function CategoriesPage() {
                 <tr>
                   <th>Name</th>
                   <th>Monthly budget</th>
+                  <th>Budget type</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -313,7 +353,27 @@ export function CategoriesPage() {
                               }
                             }))
                           }
+                          aria-label={`Monthly budget for ${category.category_name}`}
                         />
+                      </td>
+                      <td>
+                        <select
+                          value={draft.budget_kind}
+                          onChange={(event) =>
+                            setCategoryDrafts((current) => ({
+                              ...current,
+                              [category.category_id]: {
+                                ...draft,
+                                budget_kind: event.target.value as BudgetKind
+                              }
+                            }))
+                          }
+                          aria-label={`Budget type for ${category.category_name}`}
+                        >
+                          <option value="DISCRETIONARY">Discretionary</option>
+                          <option value="RECURRING">Recurring</option>
+                        </select>
+                        <span className="cellHint">{formatBudgetKind(draft.budget_kind)}</span>
                       </td>
                       <td>
                         <div className="rowActions">

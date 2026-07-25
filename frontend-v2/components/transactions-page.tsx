@@ -6,14 +6,17 @@ import {
   CalendarDays,
   Filter,
   RefreshCcw,
+  Repeat2,
   Search,
   Tags
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CategoryResponse,
+  RecurringTransactionResponse,
   RefreshResponse,
   TransactionCategoryUpdate,
+  TransactionRecurringUpdate,
   TransactionResponse,
   apiRequest,
   formatDate,
@@ -25,6 +28,7 @@ import {
   getMonthValue,
   getTransactionMonthValue,
   getErrorMessage,
+  isRecurringCategory,
   isOutbound,
   signedTransactionAmount,
   toNumber
@@ -33,9 +37,19 @@ import { EmptyBlock, LoadingBlock, MetricTile, StatusMessage } from "@/component
 
 const ALL_VALUE = "all";
 const UNCATEGORIZED_VALUE = "uncategorized";
+const LINKED_RECURRING_VALUE = "linked_recurring";
+const NEEDS_RECURRING_LINK_VALUE = "needs_recurring_link";
 
 function sortCategories(categories: CategoryResponse[]) {
   return [...categories].sort((a, b) => a.category_name.localeCompare(b.category_name));
+}
+
+function sortRecurringTransactions(series: RecurringTransactionResponse[]) {
+  return [...series].sort(
+    (a, b) =>
+      Number(b.active) - Number(a.active) ||
+      a.display_name.localeCompare(b.display_name)
+  );
 }
 
 function sortTransactionsNewestFirst(transactions: TransactionResponse[]) {
@@ -52,9 +66,11 @@ function getAccountKey(transaction: TransactionResponse) {
 export function TransactionsPage() {
   const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransactionResponse[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(getMonthValue());
   const [selectedAccount, setSelectedAccount] = useState(ALL_VALUE);
   const [selectedCategory, setSelectedCategory] = useState(ALL_VALUE);
+  const [selectedRecurring, setSelectedRecurring] = useState(ALL_VALUE);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,13 +83,15 @@ export function TransactionsPage() {
     setError(null);
 
     try {
-      const [transactionResult, categoryResult] = await Promise.all([
+      const [transactionResult, categoryResult, recurringResult] = await Promise.all([
         apiRequest<TransactionResponse[]>("/transactions"),
-        apiRequest<CategoryResponse[]>("/categories")
+        apiRequest<CategoryResponse[]>("/categories"),
+        apiRequest<RecurringTransactionResponse[]>("/recurring-transactions")
       ]);
 
       setTransactions(transactionResult.data);
       setCategories(sortCategories(categoryResult.data));
+      setRecurringTransactions(sortRecurringTransactions(recurringResult.data));
 
       if (showNotice) {
         setNotice("Transactions reloaded.");
@@ -127,6 +145,16 @@ export function TransactionsPage() {
     );
   }, [monthlyTransactions]);
 
+  const recurringCategoryIds = useMemo(
+    () =>
+      new Set(
+        categories
+          .filter(isRecurringCategory)
+          .map((category) => category.category_id)
+      ),
+    [categories]
+  );
+
   useEffect(() => {
     if (
       selectedAccount !== ALL_VALUE &&
@@ -135,6 +163,19 @@ export function TransactionsPage() {
       setSelectedAccount(ALL_VALUE);
     }
   }, [accountOptions, selectedAccount]);
+
+  useEffect(() => {
+    if (
+      selectedRecurring !== ALL_VALUE &&
+      selectedRecurring !== LINKED_RECURRING_VALUE &&
+      selectedRecurring !== NEEDS_RECURRING_LINK_VALUE &&
+      !recurringTransactions.some(
+        (item) => String(item.recurring_transaction_id) === selectedRecurring
+      )
+    ) {
+      setSelectedRecurring(ALL_VALUE);
+    }
+  }, [recurringTransactions, selectedRecurring]);
 
   const filteredTransactions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -147,17 +188,37 @@ export function TransactionsPage() {
           selectedCategory === ALL_VALUE ||
           (selectedCategory === UNCATEGORIZED_VALUE && !transaction.category_id) ||
           String(transaction.category_id ?? "") === selectedCategory;
+        const recurringMatches =
+          selectedRecurring === ALL_VALUE ||
+          (selectedRecurring === LINKED_RECURRING_VALUE &&
+            Boolean(transaction.recurring_transaction_id)) ||
+          (selectedRecurring === NEEDS_RECURRING_LINK_VALUE &&
+            isOutbound(transaction) &&
+            !transaction.recurring_transaction_id &&
+            Boolean(
+              transaction.category_id &&
+                recurringCategoryIds.has(transaction.category_id)
+            )) ||
+          String(transaction.recurring_transaction_id ?? "") === selectedRecurring;
         const queryMatches =
           !normalizedQuery ||
           transaction.merchant_name.toLowerCase().includes(normalizedQuery) ||
           (transaction.reference || "").toLowerCase().includes(normalizedQuery) ||
+          (transaction.recurring_transaction_name || "").toLowerCase().includes(normalizedQuery) ||
           transaction.account_name.toLowerCase().includes(normalizedQuery) ||
           getInstitutionName(transaction).toLowerCase().includes(normalizedQuery);
 
-        return accountMatches && categoryMatches && queryMatches;
+        return accountMatches && categoryMatches && recurringMatches && queryMatches;
       })
     );
-  }, [monthlyTransactions, query, selectedAccount, selectedCategory]);
+  }, [
+    monthlyTransactions,
+    query,
+    recurringCategoryIds,
+    selectedAccount,
+    selectedCategory,
+    selectedRecurring
+  ]);
 
   const summary = useMemo(() => {
     let spend = 0;
@@ -175,9 +236,22 @@ export function TransactionsPage() {
       spend,
       income,
       net: income - spend,
+      recurring: filteredTransactions.filter(
+        (transaction) =>
+          isOutbound(transaction) && transaction.recurring_transaction_id
+      ).length,
+      needsLink: filteredTransactions.filter(
+        (transaction) =>
+          isOutbound(transaction) &&
+          !transaction.recurring_transaction_id &&
+          Boolean(
+            transaction.category_id &&
+              recurringCategoryIds.has(transaction.category_id)
+          )
+      ).length,
       uncategorized: filteredTransactions.filter((transaction) => !transaction.category_id).length
     };
-  }, [filteredTransactions]);
+  }, [filteredTransactions, recurringCategoryIds]);
 
   async function refreshTransactions() {
     setRefreshing(true);
@@ -246,6 +320,74 @@ export function TransactionsPage() {
     }
   }
 
+  async function updateTransactionRecurring(transaction: TransactionResponse, recurringValue: string) {
+    const recurringId = Number(recurringValue);
+    const shouldUnlink = !recurringValue;
+
+    if (!shouldUnlink && !isOutbound(transaction)) {
+      setError("Only outbound transactions can be linked to recurring spend.");
+      return;
+    }
+
+    if (
+      !shouldUnlink &&
+      (!Number.isInteger(recurringId) || recurringId < 1)
+    ) {
+      return;
+    }
+
+    if (
+      (shouldUnlink && !transaction.recurring_transaction_id) ||
+      transaction.recurring_transaction_id === recurringId
+    ) {
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setSavingTransactionIds((current) => new Set(current).add(transaction.transaction_id));
+
+    try {
+      const result = shouldUnlink
+        ? await apiRequest<TransactionResponse>(
+            `/transactions/${transaction.transaction_id}/recurring`,
+            {
+              method: "DELETE"
+            }
+          )
+        : await apiRequest<TransactionResponse>(
+            `/transactions/${transaction.transaction_id}/recurring`,
+            {
+              method: "PUT",
+              body: JSON.stringify({
+                recurring_transaction_id: recurringId
+              } satisfies TransactionRecurringUpdate)
+            }
+          );
+
+      setTransactions((current) =>
+        current.map((currentTransaction) =>
+          currentTransaction.transaction_id === transaction.transaction_id
+            ? result.data
+            : currentTransaction
+        )
+      );
+      setNotice(
+        shouldUnlink
+          ? `Unlinked ${result.data.merchant_name}.`
+          : `Linked ${result.data.merchant_name}.`
+      );
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setSavingTransactionIds((current) => {
+        const next = new Set(current);
+        next.delete(transaction.transaction_id);
+        return next;
+      });
+    }
+  }
+
   return (
     <>
       <section className="pageTop">
@@ -267,14 +409,15 @@ export function TransactionsPage() {
 
       <StatusMessage error={error} notice={notice} />
 
-      <section className="metricGrid compactMetrics" aria-label="Filtered transaction summary">
+      <section className="metricGrid compactMetrics transactionMetrics" aria-label="Filtered transaction summary">
         <MetricTile label="Rows" value={String(filteredTransactions.length)} detail="matching transactions" icon={<CalendarDays />} />
         <MetricTile label="Spent" value={formatMoney(summary.spend)} tone="bad" icon={<ArrowUpRight />} />
         <MetricTile label="Income" value={formatMoney(summary.income)} tone="good" icon={<ArrowDownLeft />} />
+        <MetricTile label="Recurring" value={String(summary.recurring)} icon={<Repeat2 />} />
         <MetricTile
-          label="Uncategorized"
-          value={String(summary.uncategorized)}
-          tone={summary.uncategorized > 0 ? "warn" : "good"}
+          label="Needs link"
+          value={String(summary.needsLink)}
+          tone={summary.needsLink > 0 ? "warn" : "good"}
           icon={<Tags />}
         />
       </section>
@@ -311,6 +454,19 @@ export function TransactionsPage() {
             ))}
           </select>
         </label>
+        <label>
+          <span>Recurring</span>
+          <select value={selectedRecurring} onChange={(event) => setSelectedRecurring(event.target.value)}>
+            <option value={ALL_VALUE}>All transactions</option>
+            <option value={LINKED_RECURRING_VALUE}>Linked recurring</option>
+            <option value={NEEDS_RECURRING_LINK_VALUE}>Needs recurring link</option>
+            {recurringTransactions.map((item) => (
+              <option key={item.recurring_transaction_id} value={item.recurring_transaction_id}>
+                {item.display_name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="searchField">
           <span>Search</span>
           <span className="inputWithIcon">
@@ -336,6 +492,7 @@ export function TransactionsPage() {
                   <th>Merchant</th>
                   <th>Reference</th>
                   <th>Category</th>
+                  <th>Recurring</th>
                   <th>Account</th>
                   <th>Institution</th>
                   <th>Direction</th>
@@ -370,6 +527,42 @@ export function TransactionsPage() {
                               {category.category_name}
                             </option>
                           ))}
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          className="tableSelect"
+                          value={
+                            transaction.recurring_transaction_id
+                              ? String(transaction.recurring_transaction_id)
+                              : ""
+                          }
+                          onChange={(event) =>
+                            updateTransactionRecurring(transaction, event.target.value)
+                          }
+                          disabled={
+                            saving ||
+                            (!isOutbound(transaction) &&
+                              !transaction.recurring_transaction_id)
+                          }
+                          aria-label={`Recurring series for ${transaction.merchant_name}`}
+                        >
+                          <option value="">
+                            {isOutbound(transaction) ? "Not recurring" : "Not applicable"}
+                          </option>
+                          {recurringTransactions
+                            .filter(
+                              (item) =>
+                                item.active ||
+                                item.recurring_transaction_id ===
+                                  transaction.recurring_transaction_id
+                            )
+                            .map((item) => (
+                              <option key={item.recurring_transaction_id} value={item.recurring_transaction_id}>
+                                {item.display_name}
+                                {item.active ? "" : " (inactive)"}
+                              </option>
+                            ))}
                         </select>
                       </td>
                       <td>{transaction.account_name}</td>

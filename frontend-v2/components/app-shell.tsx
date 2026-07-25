@@ -8,6 +8,7 @@ import {
   Database,
   LayoutDashboard,
   ReceiptText,
+  Repeat2,
   RefreshCcw,
   Tags,
   WalletCards
@@ -28,6 +29,11 @@ const navItems = [
     href: "/transactions",
     label: "Transactions",
     icon: ReceiptText
+  },
+  {
+    href: "/recurring",
+    label: "Recurring",
+    icon: Repeat2
   },
   {
     href: "/balances",

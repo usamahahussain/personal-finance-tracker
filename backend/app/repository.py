@@ -1,8 +1,8 @@
 from typing import Optional
 
-from sqlalchemy import text, select, update
+from sqlalchemy import text, select
 from sqlalchemy.orm import Session
-from models import Accounts, Categories, Transactions
+from models import Accounts, Categories, RecurringTransactions, Transactions
 
 def test_db_connection(db: Session) -> bool:
     db.execute(text("SELECT 1 FROM dual")).scalar_one()
@@ -21,7 +21,8 @@ def get_categories(db: Session) -> list[Categories]:
         select(
             Categories.category_id,
             Categories.category_name,
-            Categories.budget
+            Categories.budget,
+            Categories.budget_kind
         )
         .order_by(Categories.category_name.desc())
     )
@@ -34,14 +35,104 @@ def delete_category(db: Session, category_id: int):
     category = get_category(db, category_id)
     return db.delete(category)
 
-def create_category(db: Session, category_name: str, category_budget: Optional[float]):
+def create_category(db: Session, category_name: str, category_budget: Optional[float], budget_kind: str):
     category = Categories(
         category_name = category_name,
-        budget = category_budget
+        budget = category_budget,
+        budget_kind = budget_kind
     )
     db.add(category)
     db.flush()
     return category
+
+###### Recurring Transactions CRUD ######
+
+def get_recurring_transactions(db: Session):
+    stmt = (
+        select(
+            RecurringTransactions.recurring_transaction_id,
+            RecurringTransactions.display_name,
+            RecurringTransactions.category_id,
+            Categories.category_name,
+            RecurringTransactions.expected_amount,
+            RecurringTransactions.due_day,
+            RecurringTransactions.active
+        )
+        .outerjoin(Categories, Categories.category_id == RecurringTransactions.category_id)
+        .order_by(RecurringTransactions.display_name.asc())
+    )
+    return db.execute(stmt).mappings().all()
+
+def get_recurring_transaction(db: Session, recurring_transaction_id: int):
+    stmt = (
+        select(
+            RecurringTransactions.recurring_transaction_id,
+            RecurringTransactions.display_name,
+            RecurringTransactions.category_id,
+            Categories.category_name,
+            RecurringTransactions.expected_amount,
+            RecurringTransactions.due_day,
+            RecurringTransactions.active
+        )
+        .outerjoin(Categories, Categories.category_id == RecurringTransactions.category_id)
+        .where(RecurringTransactions.recurring_transaction_id == recurring_transaction_id)
+    )
+    return db.execute(stmt).mappings().first()
+
+def get_recurring_transaction_model(db: Session, recurring_transaction_id: int):
+    stmt = select(RecurringTransactions).where(
+        RecurringTransactions.recurring_transaction_id == recurring_transaction_id
+    )
+    return db.execute(stmt).scalar_one_or_none()
+
+def create_recurring_transaction(
+        db: Session,
+        display_name: str,
+        category_id: Optional[int],
+        expected_amount: Optional[float],
+        due_day: Optional[int],
+        active: bool
+):
+    recurring_transaction = RecurringTransactions(
+        display_name = display_name,
+        category_id = category_id,
+        expected_amount = expected_amount,
+        due_day = due_day,
+        active = active
+    )
+    db.add(recurring_transaction)
+    db.flush()
+    return get_recurring_transaction(db, recurring_transaction.recurring_transaction_id)
+
+def update_recurring_transaction(
+        db: Session,
+        recurring_transaction_id: int,
+        display_name: str,
+        category_id: Optional[int],
+        expected_amount: Optional[float],
+        due_day: Optional[int],
+        active: bool
+):
+    recurring_transaction = get_recurring_transaction_model(db, recurring_transaction_id)
+    if recurring_transaction is None:
+        return None
+
+    recurring_transaction.display_name = display_name
+    recurring_transaction.category_id = category_id
+    recurring_transaction.expected_amount = expected_amount
+    recurring_transaction.due_day = due_day
+    recurring_transaction.active = active
+    db.flush()
+    return get_recurring_transaction(db, recurring_transaction_id)
+
+def delete_recurring_transaction(db: Session, recurring_transaction_id: int):
+    recurring_transaction = get_recurring_transaction_model(db, recurring_transaction_id)
+    if recurring_transaction is None:
+        return None
+
+    recurring_transaction.active = False
+    db.flush()
+    return recurring_transaction
 
 ###### Transactions CRUD ######
 
@@ -58,10 +149,16 @@ def get_transactions(db: Session) -> Optional[list[Transactions]]:
             Transactions.merchant_name,
             Transactions.category_id,
             Categories.category_name,
+            Transactions.recurring_transaction_id,
+            RecurringTransactions.display_name.label("recurring_transaction_name"),
             Transactions.reference
         )
         .join(Accounts, Accounts.account_id == Transactions.account_id)
         .outerjoin(Categories, Categories.category_id == Transactions.category_id)
+        .outerjoin(
+            RecurringTransactions,
+            RecurringTransactions.recurring_transaction_id == Transactions.recurring_transaction_id
+        )
         .order_by(
             Transactions.transaction_date.desc(),
             Transactions.transaction_id.desc()
@@ -82,10 +179,16 @@ def get_transaction(db: Session, transaction_id: int):
             Transactions.merchant_name,
             Transactions.category_id,
             Categories.category_name,
+            Transactions.recurring_transaction_id,
+            RecurringTransactions.display_name.label("recurring_transaction_name"),
             Transactions.reference
         )
         .join(Accounts, Accounts.account_id == Transactions.account_id)
         .outerjoin(Categories, Categories.category_id == Transactions.category_id)
+        .outerjoin(
+            RecurringTransactions,
+            RecurringTransactions.recurring_transaction_id == Transactions.recurring_transaction_id
+        )
         .where(Transactions.transaction_id == transaction_id)
     )
     return db.execute(stmt).mappings().first()
@@ -135,7 +238,29 @@ def refresh_transactions(db:Session, raw_transactions: list):
 def update_transaction_category(db: Session, transaction_id: int, category_id: int):
     stmt = select(Transactions).where(Transactions.transaction_id == transaction_id)
     transaction_to_update = db.execute(stmt).scalar_one_or_none()
-    # transaction_to_update = db.query(Transactions).filter_by(transaction_id=transaction_id).first()
+    if transaction_to_update is None:
+        return None
+
     transaction_to_update.category_id = category_id
+    db.flush()
+    return get_transaction(db, transaction_id)
+
+def update_transaction_recurring(db: Session, transaction_id: int, recurring_transaction_id: int):
+    stmt = select(Transactions).where(Transactions.transaction_id == transaction_id)
+    transaction_to_update = db.execute(stmt).scalar_one_or_none()
+    if transaction_to_update is None:
+        return None
+
+    transaction_to_update.recurring_transaction_id = recurring_transaction_id
+    db.flush()
+    return get_transaction(db, transaction_id)
+
+def delete_transaction_recurring(db: Session, transaction_id: int):
+    stmt = select(Transactions).where(Transactions.transaction_id == transaction_id)
+    transaction_to_update = db.execute(stmt).scalar_one_or_none()
+    if transaction_to_update is None:
+        return None
+
+    transaction_to_update.recurring_transaction_id = None
     db.flush()
     return get_transaction(db, transaction_id)

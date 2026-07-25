@@ -5,15 +5,19 @@ export type BalanceResponse = {
   error?: boolean;
 };
 
+export type BudgetKind = "DISCRETIONARY" | "RECURRING";
+
 export type CategoryResponse = {
   category_id: number;
   category_name: string;
   budget?: number | string | null;
+  budget_kind: BudgetKind | string;
 };
 
 export type CategoryUpdate = {
   category_name: string;
   budget: number | null;
+  budget_kind: BudgetKind;
 };
 
 export type TransactionResponse = {
@@ -26,11 +30,35 @@ export type TransactionResponse = {
   merchant_name: string;
   category_id?: number | null;
   category_name?: string | null;
+  recurring_transaction_id?: number | null;
+  recurring_transaction_name?: string | null;
   reference?: string | null;
 };
 
 export type TransactionCategoryUpdate = {
   category_id: number;
+};
+
+export type TransactionRecurringUpdate = {
+  recurring_transaction_id: number;
+};
+
+export type RecurringTransactionResponse = {
+  recurring_transaction_id: number;
+  display_name: string;
+  category_id?: number | null;
+  category_name?: string | null;
+  expected_amount?: number | string | null;
+  due_day?: number | null;
+  active: boolean;
+};
+
+export type RecurringTransactionUpdate = {
+  display_name: string;
+  category_id: number | null;
+  expected_amount: number | null;
+  due_day: number | null;
+  active: boolean;
 };
 
 export type RefreshResponse = {
@@ -100,6 +128,18 @@ export function formatMoney(value: number | string | null | undefined) {
 
 export function formatCompactMoney(value: number | string | null | undefined) {
   return compactMoneyFormatter.format(toNumber(value));
+}
+
+export function normalizeBudgetKind(value: string | null | undefined): BudgetKind {
+  return value === "RECURRING" ? "RECURRING" : "DISCRETIONARY";
+}
+
+export function formatBudgetKind(value: string | null | undefined) {
+  return normalizeBudgetKind(value) === "RECURRING" ? "Recurring" : "Discretionary";
+}
+
+export function isRecurringCategory(category: CategoryResponse) {
+  return normalizeBudgetKind(category.budget_kind) === "RECURRING";
 }
 
 export function getMonthValue(date = new Date()) {

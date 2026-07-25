@@ -9,18 +9,27 @@ from repository import (
     get_account as repo_get_single_account,
     delete_category as repo_delete_category,
     create_category as repo_create_category,
+    get_recurring_transactions as repo_get_recurring_transactions,
+    get_recurring_transaction as repo_get_recurring_transaction,
+    get_recurring_transaction_model as repo_get_recurring_transaction_model,
+    create_recurring_transaction as repo_create_recurring_transaction,
+    update_recurring_transaction as repo_update_recurring_transaction,
+    delete_recurring_transaction as repo_delete_recurring_transaction,
     get_transactions as repo_get_transactions,
     refresh_transactions as repo_refresh_transactions,
-    update_transaction_category as repo_update_transaction
+    update_transaction_category as repo_update_transaction,
+    update_transaction_recurring as repo_update_transaction_recurring,
+    delete_transaction_recurring as repo_delete_transaction_recurring
 )
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Any, Optional
 from sqlalchemy.orm import Session
-from models import Categories, Transactions
+from models import Categories, RecurringTransactions, Transactions
 
 LUNCHFLOW_URL = os.getenv("LUNCHFLOW_URL", "https://www.lunchflow.app/api/v1/accounts")
 LUNCHFLOW_API_KEY_ENV = "LUNCHFLOW_API_KEY"
+BUDGET_KINDS = {"DISCRETIONARY", "RECURRING"}
 
 class RawTransaction(BaseModel):
     lunchflow_transaction_id: str
@@ -102,11 +111,37 @@ def get_all_account_balances(db: Session):
 def get_categories(db: Session) -> list[Categories]:
     return repo_get_categories(db)
 
+def normalize_budget_kind(budget_kind: Optional[str]) -> str:
+    if budget_kind is None:
+        return "DISCRETIONARY"
+
+    normalized_budget_kind = budget_kind.upper()
+    if normalized_budget_kind not in BUDGET_KINDS:
+        raise ValueError("budget_kind must be DISCRETIONARY or RECURRING")
+
+    return normalized_budget_kind
+
+def validate_recurring_transaction_fields(
+        db: Session,
+        category_id: Optional[int],
+        expected_amount: Optional[float],
+        due_day: Optional[int]
+):
+    if category_id is not None and repo_get_category(db, category_id) is None:
+        raise ValueError(f"Category {category_id} was not found")
+
+    if expected_amount is not None and expected_amount < 0:
+        raise ValueError("expected_amount must be greater than or equal to 0")
+
+    if due_day is not None and (due_day < 1 or due_day > 31):
+        raise ValueError("due_day must be between 1 and 31")
+
 def update_category(
     db: Session,
     category_id: int,
     category_name: str,
     category_budget: Optional[float],
+    budget_kind: Optional[str],
 ) -> Categories:
     category = repo_get_category(db, category_id)
     if category is None:
@@ -114,24 +149,89 @@ def update_category(
 
     category.category_name = category_name
     category.budget = category_budget
+    if budget_kind is not None:
+        category.budget_kind = normalize_budget_kind(budget_kind)
     return category
 
 def delete_category(
         db: Session,
         category_id: int
 ):
+    if repo_get_category(db, category_id) is None:
+        raise ValueError(f"Category {category_id} was not found")
+
     repo_delete_category(db, category_id)
     return
 
 def create_category(
         db: Session,
         category_name: str,
-        category_budget: Optional[float]
+        category_budget: Optional[float],
+        budget_kind: Optional[str]
 ) -> Categories:
-    return repo_create_category(db, category_name, category_budget)
+    return repo_create_category(db, category_name, category_budget, normalize_budget_kind(budget_kind))
 
 def test_connection(db: Session) -> bool:
     return test_db_connection(db)
+
+###### Recurring Transactions ######
+def get_recurring_transactions(db: Session) -> list[RecurringTransactions]:
+    return repo_get_recurring_transactions(db)
+
+def get_recurring_transaction(db: Session, recurring_transaction_id: int):
+    recurring_transaction = repo_get_recurring_transaction(db, recurring_transaction_id)
+    if recurring_transaction is None:
+        raise ValueError(f"Recurring transaction {recurring_transaction_id} was not found")
+
+    return recurring_transaction
+
+def create_recurring_transaction(
+        db: Session,
+        display_name: str,
+        category_id: Optional[int],
+        expected_amount: Optional[float],
+        due_day: Optional[int],
+        active: bool
+):
+    validate_recurring_transaction_fields(db, category_id, expected_amount, due_day)
+    return repo_create_recurring_transaction(
+        db,
+        display_name,
+        category_id,
+        expected_amount,
+        due_day,
+        active
+    )
+
+def update_recurring_transaction(
+        db: Session,
+        recurring_transaction_id: int,
+        display_name: str,
+        category_id: Optional[int],
+        expected_amount: Optional[float],
+        due_day: Optional[int],
+        active: bool
+):
+    if repo_get_recurring_transaction_model(db, recurring_transaction_id) is None:
+        raise ValueError(f"Recurring transaction {recurring_transaction_id} was not found")
+
+    validate_recurring_transaction_fields(db, category_id, expected_amount, due_day)
+    return repo_update_recurring_transaction(
+        db,
+        recurring_transaction_id,
+        display_name,
+        category_id,
+        expected_amount,
+        due_day,
+        active
+    )
+
+def delete_recurring_transaction(db: Session, recurring_transaction_id: int):
+    deleted_recurring_transaction = repo_delete_recurring_transaction(db, recurring_transaction_id)
+    if deleted_recurring_transaction is None:
+        raise ValueError(f"Recurring transaction {recurring_transaction_id} was not found")
+
+    return
 
 
 ###### Transactions ######
@@ -139,7 +239,35 @@ def get_transactions(db: Session) -> Optional[list[Transactions]]:
     return repo_get_transactions(db)
 
 def update_transaction(db: Session, transaction_id: int, category_id: int) -> Transactions:
-    return repo_update_transaction(db, transaction_id, category_id)
+    if repo_get_category(db, category_id) is None:
+        raise ValueError(f"Category {category_id} was not found")
+
+    transaction = repo_update_transaction(db, transaction_id, category_id)
+    if transaction is None:
+        raise ValueError(f"Transaction {transaction_id} was not found")
+
+    return transaction
+
+def update_transaction_recurring(
+        db: Session,
+        transaction_id: int,
+        recurring_transaction_id: int
+) -> Transactions:
+    if repo_get_recurring_transaction_model(db, recurring_transaction_id) is None:
+        raise ValueError(f"Recurring transaction {recurring_transaction_id} was not found")
+
+    transaction = repo_update_transaction_recurring(db, transaction_id, recurring_transaction_id)
+    if transaction is None:
+        raise ValueError(f"Transaction {transaction_id} was not found")
+
+    return transaction
+
+def delete_transaction_recurring(db: Session, transaction_id: int) -> Transactions:
+    transaction = repo_delete_transaction_recurring(db, transaction_id)
+    if transaction is None:
+        raise ValueError(f"Transaction {transaction_id} was not found")
+
+    return transaction
 
 def refresh_transactions(db: Session):
     accounts = repo_get_accounts(db)
