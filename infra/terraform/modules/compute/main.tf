@@ -1,3 +1,7 @@
+resource "terraform_data" "cloud_init" {
+  input = var.cloud_init
+}
+
 resource "oci_core_instance" "app" {
   compartment_id      = var.compartment_ocid
   availability_domain = var.availability_domain
@@ -26,5 +30,9 @@ resource "oci_core_instance" "app" {
     source_type             = "image"
     source_id               = var.image_id
     boot_volume_size_in_gbs = var.boot_volume_size_in_gbs
+  }
+
+  lifecycle {
+    replace_triggered_by = [terraform_data.cloud_init]
   }
 }

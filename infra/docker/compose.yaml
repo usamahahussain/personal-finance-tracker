@@ -1,0 +1,57 @@
+name: pft
+
+services:
+  ingress:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - portal
+      - finance-frontend
+    networks:
+      - edge
+
+  portal:
+    build:
+      context: ./portal
+    restart: unless-stopped
+    networks:
+      - edge
+
+  finance-frontend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/finance-frontend.Dockerfile
+      args:
+        NEXT_BASE_PATH: /finance
+    restart: unless-stopped
+    environment:
+      FASTAPI_BASE_URL: http://finance-backend:8000
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      - finance-backend
+    networks:
+      - edge
+      - finance-internal
+
+  finance-backend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/finance-backend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - /etc/pft/finance/backend.env
+    volumes:
+      - /etc/pft/finance/wallet:/opt/oracle/wallet:ro
+    networks:
+      - finance-internal
+
+networks:
+  edge:
+    driver: bridge
+  finance-internal:
+    driver: bridge
+    internal: true

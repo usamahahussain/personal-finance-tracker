@@ -58,6 +58,45 @@ variable "ssh_public_key" {
   description = "SSH public key to install on the app VM."
 }
 
+variable "application_repository" {
+  type        = string
+  description = "HTTPS Git repository URL cloned onto the application VM during cloud-init."
+  default     = "https://github.com/usamahahussain/personal-finance-tracker.git"
+}
+
+variable "application_ref" {
+  type        = string
+  description = "Immutable 40-character Git commit SHA checked out during cloud-init."
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{40}$", var.application_ref))
+    error_message = "application_ref must be a full lowercase Git commit SHA."
+  }
+}
+
+variable "application_dir" {
+  type        = string
+  description = "Absolute application checkout path on the VM."
+  default     = "/opt/personal-finance-tracker"
+}
+
+variable "backend_env" {
+  type        = map(string)
+  sensitive   = true
+  description = "Sensitive FastAPI environment values, excluding PFT_DB_WALLET_DIR which is set by the deployment."
+
+  validation {
+    condition     = !contains(keys(var.backend_env), "PFT_DB_WALLET_DIR") && alltrue([for key, value in var.backend_env : can(regex("^[A-Za-z_][A-Za-z0-9_]*$", key)) && !strcontains(value, "\n") && !strcontains(value, "\r")])
+    error_message = "backend_env keys must be environment-variable names, values cannot contain newlines, and PFT_DB_WALLET_DIR is managed by the deployment."
+  }
+}
+
+variable "adb_wallet_zip_base64" {
+  type        = string
+  sensitive   = true
+  description = "Base64-encoded ADB wallet ZIP mounted read-only into the FastAPI container."
+}
+
 variable "adb_admin_password" {
   type        = string
   sensitive   = true

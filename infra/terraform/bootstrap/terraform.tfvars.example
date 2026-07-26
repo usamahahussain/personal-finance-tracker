@@ -1,0 +1,3 @@
+compartment_ocid = "<compartment-ocid>"
+region           = "uk-london-1"
+bucket_name      = "pft-terraform-state"

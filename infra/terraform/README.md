@@ -22,23 +22,45 @@ VCN OCID, route table OCID, SSH public key, admin CIDR, and database password
 from a local `.tfvars` file or `TF_VAR_` environment variables. Do not commit
 real OCI resource identifiers or local network details.
 
-## VM web proxy
+## Docker application VM
 
-After provisioning an Oracle Linux application VM, install and configure Nginx
-as the public HTTP reverse proxy for the loopback-only Next.js server:
+The application VM is an immutable Docker Compose deployment. Its only public
+container is the Nginx ingress on port 80. The ingress serves the app launcher
+at `/` and the Personal Finance Tracker at `/finance`; the FastAPI backend is
+reachable only on the internal Docker network through the Next.js proxy route.
+
+Cloud-init installs Docker, checks out the exact `application_ref` commit,
+creates the ADB wallet and backend environment files under `/etc/pft/finance`,
+then runs `docker compose up --build --detach`. Docker restart policies restore
+the stack after a VM reboot. No host Nginx or `pft-*` systemd user service is
+installed by this deployment.
+
+`application_ref` is required and must be the full commit SHA of a revision
+already pushed to `application_repository` that includes the Docker deployment
+assets. This prevents a replacement VM from accidentally building an older
+repository revision that lacks its Compose configuration.
+
+The rendered cloud-init is an instance replacement trigger. Changing the
+application commit, Docker configuration, cloud-init, or sensitive deployment
+inputs causes Terraform to replace the VM so the first-boot deployment runs.
+
+Set `backend_env` and `adb_wallet_zip_base64` through `TF_VAR_` environment
+variables or an ignored local tfvars file. These sensitive values are written
+to the instance user-data and Terraform state; use the remote state workflow
+below and restrict VM/OCI metadata access accordingly.
+
+## Remote state bootstrap
+
+Create the private, versioned Object Storage bucket once using
+`infra/terraform/bootstrap`. Then copy
+`environments/dev/backend.hcl.example` to an ignored `backend.hcl`, configure
+the Object Storage namespace and Terraform operator's OCI customer secret key,
+and migrate the existing state:
 
 ```bash
-sudo ./infra/scripts/setup-nginx.sh
+cd infra/terraform/environments/dev
+terraform init -migrate-state -backend-config=backend.hcl
 ```
 
-The script is idempotent and defaults to proxying port 80 to
-`http://127.0.0.1:3000`. Override the upstream when required:
-
-```bash
-sudo UPSTREAM_HOST=127.0.0.1 UPSTREAM_PORT=3000 ./infra/scripts/setup-nginx.sh
-```
-
-It installs and enables Nginx and firewalld, opens the host HTTP service,
-configures the SELinux network-connect policy for Nginx, validates the Nginx
-configuration, and restarts the service. The OCI NSG must separately permit
-TCP port 80 from the intended client CIDRs.
+The bucket is encrypted at rest by OCI and must be restricted to the Terraform
+operators. Do not commit `backend.hcl`, access keys, wallets, or tfvars files.

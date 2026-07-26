@@ -1,0 +1,32 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+
+write_files:
+  - path: /usr/local/sbin/install-docker.sh
+    owner: root:root
+    permissions: "0755"
+    encoding: b64
+    content: ${install_docker_b64}
+
+  - path: /usr/local/sbin/deploy-docker-stack.sh
+    owner: root:root
+    permissions: "0755"
+    encoding: b64
+    content: ${deploy_stack_b64}
+
+  - path: /etc/pft/finance/backend.env
+    owner: root:root
+    permissions: "0600"
+    encoding: b64
+    content: ${backend_env_b64}
+
+  - path: /etc/pft/finance/wallet.zip
+    owner: root:root
+    permissions: "0600"
+    encoding: b64
+    content: ${adb_wallet_zip_b64}
+
+runcmd:
+  - [bash, /usr/local/sbin/install-docker.sh]
+  - [bash, /usr/local/sbin/deploy-docker-stack.sh, ${jsonencode(application_repository)}, ${jsonencode(application_ref)}, ${jsonencode(application_dir)}]

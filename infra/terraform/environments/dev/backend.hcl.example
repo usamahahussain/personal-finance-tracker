@@ -1,0 +1,17 @@
+# Copy to backend.hcl, replace the placeholders, then run:
+# terraform init -migrate-state -backend-config=backend.hcl
+
+bucket = "pft-terraform-state"
+key    = "dev/terraform.tfstate"
+region = "uk-london-1"
+
+# Obtain the namespace from infra/terraform/bootstrap outputs.
+endpoints = {
+  s3 = "https://<object-storage-namespace>.compat.objectstorage.uk-london-1.oraclecloud.com"
+}
+
+skip_credentials_validation = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_region_validation      = true
+use_lockfile                = true

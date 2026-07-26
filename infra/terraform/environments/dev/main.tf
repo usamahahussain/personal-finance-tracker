@@ -2,6 +2,23 @@ data "oci_identity_availability_domains" "ads" {
   compartment_id = var.compartment_ocid
 }
 
+locals {
+  backend_env_contents = "${join("\n", concat(
+    ["PFT_DB_WALLET_DIR=/opt/oracle/wallet"],
+    [for key in sort(keys(var.backend_env)) : "${key}=${var.backend_env[key]}"]
+  ))}\n"
+
+  cloud_init = templatefile("${path.module}/cloud-init.yaml.tftpl", {
+    application_repository = var.application_repository
+    application_ref        = var.application_ref
+    application_dir        = var.application_dir
+    install_docker_b64     = base64encode(file("${path.module}/../../../scripts/install-docker.sh"))
+    deploy_stack_b64       = base64encode(file("${path.module}/../../../scripts/deploy-docker-stack.sh"))
+    backend_env_b64        = base64encode(local.backend_env_contents)
+    adb_wallet_zip_b64     = var.adb_wallet_zip_base64
+  })
+}
+
 module "network" {
   source = "../../modules/network"
 
@@ -24,7 +41,7 @@ module "compute" {
   subnet_id           = module.network.app_subnet_id
   nsg_ids             = [module.network.app_nsg_id]
   ssh_public_key      = var.ssh_public_key
-  cloud_init          = file("${path.module}/cloud-init-docker.yaml")
+  cloud_init          = local.cloud_init
   image_id            = var.compute_image_id
   shape               = var.compute_shape
   ocpus               = var.compute_ocpus

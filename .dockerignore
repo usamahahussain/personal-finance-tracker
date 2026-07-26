@@ -1,0 +1,13 @@
+.git
+.next
+node_modules
+frontend
+frontend-v2/node_modules
+frontend-v2/.next
+backend/app/.venv
+backend/**/.env
+.env
+infra/terraform
+keys
+*.tfstate
+*.tfvars
