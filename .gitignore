@@ -20,6 +20,7 @@ pnpm-debug.log*
 # Environment / secrets
 .env
 .env.*
+backend.env
 !.env.example
 *.pem
 *.key
@@ -27,6 +28,7 @@ pnpm-debug.log*
 *.pfx
 wallet/
 Wallet_*/
+Wallet_*.zip
 keys/
 
 # Terraform

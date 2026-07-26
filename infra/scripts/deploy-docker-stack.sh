@@ -4,9 +4,10 @@
 # and starts the complete Docker Compose application stack.
 set -euo pipefail
 
-readonly REPOSITORY_URL="${1:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR}"
-readonly GIT_REF="${2:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR}"
-readonly APP_DIR="${3:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR}"
+readonly REPOSITORY_URL="${1:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR WALLET_URL}"
+readonly GIT_REF="${2:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR WALLET_URL}"
+readonly APP_DIR="${3:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR WALLET_URL}"
+readonly WALLET_URL="${4:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR WALLET_URL}"
 readonly RUNTIME_DIR="/etc/pft/finance"
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -24,15 +25,11 @@ if [[ ! -s "${RUNTIME_DIR}/backend.env" ]]; then
   exit 1
 fi
 
-if [[ ! -s "${RUNTIME_DIR}/wallet.zip" ]]; then
-  echo "Missing ADB wallet archive at ${RUNTIME_DIR}/wallet.zip." >&2
-  exit 1
-fi
-
 install -d -m 0755 "$(dirname "${APP_DIR}")"
 git clone "${REPOSITORY_URL}" "${APP_DIR}"
 git -C "${APP_DIR}" checkout --detach "${GIT_REF}"
 
+curl --fail --location --silent --show-error "${WALLET_URL}" --output "${RUNTIME_DIR}/wallet.zip"
 install -d -m 0700 "${RUNTIME_DIR}/wallet"
 unzip -o -q "${RUNTIME_DIR}/wallet.zip" -d "${RUNTIME_DIR}/wallet"
 chmod 0600 "${RUNTIME_DIR}/backend.env" "${RUNTIME_DIR}/wallet.zip"

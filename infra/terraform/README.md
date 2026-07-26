@@ -44,10 +44,12 @@ The rendered cloud-init is an instance replacement trigger. Changing the
 application commit, Docker configuration, cloud-init, or sensitive deployment
 inputs causes Terraform to replace the VM so the first-boot deployment runs.
 
-Set `backend_env` and `adb_wallet_zip_base64` through `TF_VAR_` environment
-variables or an ignored local tfvars file. These sensitive values are written
-to the instance user-data and Terraform state; use the remote state workflow
-below and restrict VM/OCI metadata access accordingly.
+Set `backend_env_path` and `adb_wallet_zip_path` through `TF_VAR_` environment
+variables or an ignored local tfvars file. Terraform uploads the wallet archive
+to a private, versioned deployment-artifacts bucket and gives cloud-init a
+time-limited pre-authenticated download URL. The backend environment file and
+download URL are stored in instance user-data and Terraform state; use the
+remote state workflow below and restrict VM/OCI metadata access accordingly.
 
 ## Remote state bootstrap
 

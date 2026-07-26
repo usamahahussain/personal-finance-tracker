@@ -80,21 +80,32 @@ variable "application_dir" {
   default     = "/opt/personal-finance-tracker"
 }
 
-variable "backend_env" {
-  type        = map(string)
+variable "backend_env_path" {
+  type        = string
   sensitive   = true
-  description = "Sensitive FastAPI environment values, excluding PFT_DB_WALLET_DIR which is set by the deployment."
+  description = "Local path to the FastAPI environment file written to the replacement VM."
 
   validation {
-    condition     = !contains(keys(var.backend_env), "PFT_DB_WALLET_DIR") && alltrue([for key, value in var.backend_env : can(regex("^[A-Za-z_][A-Za-z0-9_]*$", key)) && !strcontains(value, "\n") && !strcontains(value, "\r")])
-    error_message = "backend_env keys must be environment-variable names, values cannot contain newlines, and PFT_DB_WALLET_DIR is managed by the deployment."
+    condition     = fileexists(var.backend_env_path)
+    error_message = "backend_env_path must reference an existing local environment file."
   }
 }
 
-variable "adb_wallet_zip_base64" {
+variable "adb_wallet_zip_path" {
   type        = string
   sensitive   = true
-  description = "Base64-encoded ADB wallet ZIP mounted read-only into the FastAPI container."
+  description = "Local path to the ADB wallet ZIP uploaded to private Object Storage for VM bootstrap."
+
+  validation {
+    condition     = fileexists(var.adb_wallet_zip_path)
+    error_message = "adb_wallet_zip_path must reference an existing local wallet ZIP."
+  }
+}
+
+variable "wallet_download_expiry" {
+  type        = string
+  description = "Fixed RFC3339 expiry for the wallet pre-authenticated download URL."
+  default     = "2035-01-01T00:00:00Z"
 }
 
 variable "adb_admin_password" {

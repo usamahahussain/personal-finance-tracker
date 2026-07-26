@@ -9,17 +9,11 @@ application_repository = "https://github.com/usamahahussain/personal-finance-tra
 application_ref        = "<full-40-character-commit-containing-the-docker-deployment>"
 application_dir        = "/opt/personal-finance-tracker"
 
-# Set these through TF_VAR_backend_env and TF_VAR_adb_wallet_zip_base64, or in
-# an ignored local tfvars file. Both values are stored in Terraform state.
-# backend_env = {
-#   LUNCHFLOW_URL              = "https://www.lunchflow.app/api/v1/accounts"
-#   LUNCHFLOW_API_KEY          = "replace-with-lunchflow-api-key"
-#   PFT_DB_USERNAME            = "finance_app"
-#   PFT_DB_PASSWORD            = "replace-with-database-password"
-#   PFT_DB_DSN                 = "pftdev_high"
-#   PFT_DB_WALLET_PASSWORD     = "replace-with-wallet-password-if-required"
-# }
-# adb_wallet_zip_base64 = "$(base64 < Wallet_PFTDEV.zip | tr -d '\n')"
+# Set these through TF_VAR_backend_env_path and TF_VAR_adb_wallet_zip_path, or
+# in an ignored local tfvars file. The referenced secret content is stored in
+# Terraform state.
+# backend_env_path     = "/absolute/path/to/backend.env"
+# adb_wallet_zip_path = "/absolute/path/to/Wallet_PFTDEV.zip"
 
 vcn_cidr                       = "10.0.0.0/16"
 compartment_ocid               = "<compartment-ocid>"

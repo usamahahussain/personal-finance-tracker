@@ -2,20 +2,44 @@ data "oci_identity_availability_domains" "ads" {
   compartment_id = var.compartment_ocid
 }
 
-locals {
-  backend_env_contents = "${join("\n", concat(
-    ["PFT_DB_WALLET_DIR=/opt/oracle/wallet"],
-    [for key in sort(keys(var.backend_env)) : "${key}=${var.backend_env[key]}"]
-  ))}\n"
+data "oci_objectstorage_namespace" "current" {
+  compartment_id = var.compartment_ocid
+}
 
+resource "oci_objectstorage_bucket" "deployment_artifacts" {
+  compartment_id = var.compartment_ocid
+  namespace      = data.oci_objectstorage_namespace.current.namespace
+  name           = "pft-${var.environment}-deployment-artifacts"
+  access_type    = "NoPublicAccess"
+  storage_tier   = "Standard"
+  versioning     = "Enabled"
+}
+
+resource "oci_objectstorage_object" "adb_wallet" {
+  namespace = data.oci_objectstorage_namespace.current.namespace
+  bucket    = oci_objectstorage_bucket.deployment_artifacts.name
+  object    = "finance/Wallet_PFTDEV.zip"
+  source    = var.adb_wallet_zip_path
+}
+
+resource "oci_objectstorage_preauthrequest" "adb_wallet" {
+  namespace    = data.oci_objectstorage_namespace.current.namespace
+  bucket       = oci_objectstorage_bucket.deployment_artifacts.name
+  name         = "pft-${var.environment}-wallet-bootstrap"
+  access_type  = "ObjectRead"
+  object_name  = oci_objectstorage_object.adb_wallet.object
+  time_expires = var.wallet_download_expiry
+}
+
+locals {
   cloud_init = templatefile("${path.module}/cloud-init.yaml.tftpl", {
     application_repository = var.application_repository
     application_ref        = var.application_ref
     application_dir        = var.application_dir
     install_docker_b64     = base64encode(file("${path.module}/../../../scripts/install-docker.sh"))
     deploy_stack_b64       = base64encode(file("${path.module}/../../../scripts/deploy-docker-stack.sh"))
-    backend_env_b64        = base64encode(local.backend_env_contents)
-    adb_wallet_zip_b64     = var.adb_wallet_zip_base64
+    backend_env_b64        = filebase64(var.backend_env_path)
+    wallet_download_url    = "https://objectstorage.${var.region}.oraclecloud.com${oci_objectstorage_preauthrequest.adb_wallet.access_uri}"
   })
 }
 
