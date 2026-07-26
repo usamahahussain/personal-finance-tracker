@@ -228,15 +228,20 @@ export function getErrorMessage(error: unknown) {
   return String(error);
 }
 
+const applicationBasePath = (
+  process.env.NEXT_PUBLIC_BASE_PATH || ""
+).replace(/\/$/, "");
+
 export async function apiRequest<T>(
   path: string,
   init?: RequestInit
 ): Promise<ApiResult<T>> {
-  const endpoint = path.startsWith("/api/backend")
+  const backendPath = path.startsWith("/api/backend")
     ? path
     : path.startsWith("/")
       ? `/api/backend${path}`
       : `/api/backend/${path}`;
+  const endpoint = `${applicationBasePath}${backendPath}`;
 
   const response = await fetch(endpoint, {
     ...init,

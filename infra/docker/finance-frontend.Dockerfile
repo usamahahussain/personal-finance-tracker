@@ -7,16 +7,20 @@ RUN npm ci
 COPY frontend-v2/ ./
 ARG NEXT_BASE_PATH=/finance
 ENV NEXT_BASE_PATH=${NEXT_BASE_PATH}
+ENV NEXT_PUBLIC_BASE_PATH=${NEXT_BASE_PATH}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:22-alpine AS runtime
 
 WORKDIR /app
+ARG NEXT_BASE_PATH=/finance
 ENV NODE_ENV=production
+ENV NEXT_BASE_PATH=${NEXT_BASE_PATH}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=build /app/package.json /app/package-lock.json ./
+COPY --from=build /app/next.config.mjs ./next.config.mjs
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 

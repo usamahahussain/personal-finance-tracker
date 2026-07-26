@@ -9,6 +9,8 @@ readonly GIT_REF="${2:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR WALLET_URL}"
 readonly APP_DIR="${3:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR WALLET_URL}"
 readonly WALLET_URL="${4:?Usage: $0 REPOSITORY_URL GIT_REF APP_DIR WALLET_URL}"
 readonly RUNTIME_DIR="/etc/pft/finance"
+readonly COMPOSE_DIR="${APP_DIR}/infra/docker"
+readonly COMPOSE_FILE="${COMPOSE_DIR}/compose.yaml"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run this script as root." >&2
@@ -36,4 +38,12 @@ chmod 0600 "${RUNTIME_DIR}/backend.env" "${RUNTIME_DIR}/wallet.zip"
 find "${RUNTIME_DIR}/wallet" -type d -exec chmod 0700 {} \;
 find "${RUNTIME_DIR}/wallet" -type f -exec chmod 0600 {} \;
 
-docker compose --project-directory "${APP_DIR}" --file "${APP_DIR}/infra/docker/compose.yaml" up --build --detach --remove-orphans
+docker compose \
+  --project-directory "${COMPOSE_DIR}" \
+  --file "${COMPOSE_FILE}" \
+  config --quiet
+
+docker compose \
+  --project-directory "${COMPOSE_DIR}" \
+  --file "${COMPOSE_FILE}" \
+  up --build --detach --remove-orphans --wait --wait-timeout 300

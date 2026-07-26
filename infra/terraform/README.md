@@ -141,7 +141,8 @@ git rev-parse origin/main
 
 ### Backend environment file
 
-Create an ignored environment file from `backend/.env.example`. It must define:
+Create an ignored environment file from `backend/app/.env.example`. It must
+define:
 
 - `LUNCHFLOW_URL` and `LUNCHFLOW_API_KEY`, obtained from the Lunchflow account;
 - `PFT_DB_USERNAME` and `PFT_DB_PASSWORD`;
@@ -345,12 +346,13 @@ ssh -i ../../../../keys/pft_dev_vm "opc@${APP_IP}" \
 
 ssh -i ../../../../keys/pft_dev_vm "opc@${APP_IP}" \
   'sudo docker compose \
-    --project-directory /opt/personal-finance-tracker \
+    --project-directory /opt/personal-finance-tracker/infra/docker \
     --file /opt/personal-finance-tracker/infra/docker/compose.yaml \
     ps'
 
 curl --fail "http://${APP_IP}/"
 curl --fail "http://${APP_IP}/finance"
+curl --fail "http://${APP_IP}/finance/api/backend/database"
 ```
 
 If a container is unhealthy or absent:
@@ -358,7 +360,7 @@ If a container is unhealthy or absent:
 ```bash
 ssh -i ../../../../keys/pft_dev_vm "opc@${APP_IP}" \
   'sudo docker compose \
-    --project-directory /opt/personal-finance-tracker \
+    --project-directory /opt/personal-finance-tracker/infra/docker \
     --file /opt/personal-finance-tracker/infra/docker/compose.yaml \
     logs --tail=200'
 ```
