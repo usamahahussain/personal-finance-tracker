@@ -54,8 +54,10 @@ below and restrict VM/OCI metadata access accordingly.
 Create the private, versioned Object Storage bucket once using
 `infra/terraform/bootstrap`. Then copy
 `environments/dev/backend.hcl.example` to an ignored `backend.hcl`, configure
-the Object Storage namespace and Terraform operator's OCI customer secret key,
-and migrate the existing state:
+the Object Storage namespace, and store the Terraform operator's OCI customer
+secret key in an AWS credentials profile named `pft-oracle`. The dedicated
+profile prevents credentials for another OCI tenancy from being selected.
+Then migrate the existing state:
 
 ```bash
 cd infra/terraform/environments/dev
