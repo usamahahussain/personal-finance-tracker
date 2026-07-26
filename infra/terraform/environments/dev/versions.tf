@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.12.0"
 
   required_providers {
     oci = {
@@ -7,8 +7,4 @@ terraform {
       version = "~> 6.0"
     }
   }
-
-  # Configure this after the Object Storage state bucket exists.
-  # backend "s3" {}
 }
-

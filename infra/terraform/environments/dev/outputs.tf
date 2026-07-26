@@ -10,8 +10,11 @@ output "adb_private_endpoint" {
   value = module.database.private_endpoint
 }
 
+output "adb_id" {
+  value = module.database.autonomous_database_id
+}
+
 output "adb_connection_strings" {
   value     = module.database.connection_strings
   sensitive = true
 }
-
