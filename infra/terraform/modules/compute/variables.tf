@@ -26,6 +26,7 @@ variable "cloud_init" {
   type        = string
   description = "Optional cloud-init config to run on first boot."
   default     = null
+  sensitive   = true
 }
 
 variable "image_id" {

@@ -1,5 +1,5 @@
 resource "terraform_data" "cloud_init" {
-  input = var.cloud_init
+  triggers_replace = var.cloud_init == null ? null : sha256(var.cloud_init)
 }
 
 resource "oci_core_instance" "app" {
